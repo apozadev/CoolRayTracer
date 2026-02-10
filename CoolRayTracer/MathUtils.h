@@ -11,12 +11,10 @@ inline double DegreesToRadians(double _fDegrees)
 
 inline vec3 HemisphereSample(double _fRandom1, double _fRandom2)
 {
-  double fSinTheta = _fRandom2 * _fRandom2;
-  double fCosTheta = sqrt(1.0f - _fRandom2 * _fRandom2);
-  double fPhi = DegreesToRadians(2.0f * fPI * _fRandom2);
-  vec3 vSampleDirection = vec3(cos(fPhi) * fSinTheta, cos(fPhi) * fSinTheta, fCosTheta);
-
-  return vSampleDirection;
+  double fPhi = 2.0f * fPI * _fRandom1;
+  double fCosTheta = 1.0f - _fRandom2;
+  double fSinTheta = sqrt(1.0f - fCosTheta * fCosTheta);
+  return vec3(cos(fPhi) * fSinTheta, sin(fPhi) * fSinTheta, fCosTheta);
 }
 
 inline void TBN(vec3& vT_, vec3& vB_, vec3 _vN)

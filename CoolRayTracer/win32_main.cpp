@@ -461,7 +461,7 @@ DWORD WINAPI MyThreadFunction(LPVOID lpParam)
   oGameBuffer.iWidth = g_oBackBuffer.iWidth;
   oGameBuffer.iHeight = g_oBackBuffer.iHeight;
 
-  int iTileX = iIdx % 3;
+ /* int iTileX = iIdx % 3;
   int iTileY = iIdx / 3;
 
   int iTileWidth = oGameBuffer.iWidth / 3;
@@ -473,7 +473,9 @@ DWORD WINAPI MyThreadFunction(LPVOID lpParam)
   int iEndX = iTileX >= 2 ? oGameBuffer.iWidth : iStartX + iTileWidth;
   int iEndY = iTileY >= 1 ? oGameBuffer.iHeight : iStartY + iTileHeight;
 
-  UpdateScreenBufferPartial(&oGameBuffer, iStartX, iStartY, iEndX, iEndY);
+  UpdateScreenBufferPartial(&oGameBuffer, iStartX, iStartY, iEndX, iEndY);*/
+
+  UpdateScreenBufferPartial(&oGameBuffer, 0, 0, oGameBuffer.iWidth, oGameBuffer.iHeight);
 
   return 0;
 }
@@ -546,7 +548,7 @@ int WINAPI WinMain(
   oGameBuffer.iWidth = g_oBackBuffer.iWidth;
   oGameBuffer.iHeight = g_oBackBuffer.iHeight;
 
-  constexpr int THREAD_COUNT = 6;
+  constexpr int THREAD_COUNT = 1;
 
   HANDLE  hThreadArray[THREAD_COUNT];
   int  iThreadIdxArray[THREAD_COUNT];

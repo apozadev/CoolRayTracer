@@ -224,9 +224,8 @@ void UpdateScreenBufferPartial(GameScreenBuffer* Buffer, int _iStartX, int _iSta
             bHit = true;
           }
         }
-
-        oHitInfo = {};
-        oHitInfo.fT = 1.f;
+        
+        float fAttenuation = 1.f;
 
         if (bHit)
         {
@@ -240,11 +239,12 @@ void UpdateScreenBufferPartial(GameScreenBuffer* Buffer, int _iStartX, int _iSta
             if (HitHittable(oRay, oHittable, oCandidateHitInfo) && (oHitInfo.fT == 0.f || oCandidateHitInfo.fT < oHitInfo.fT))
             {
               oHitInfo = oCandidateHitInfo;
+              fAttenuation = (oHitInfo.fT > 1.f) ? 1.f : oHitInfo.fT * oHitInfo.fT * oHitInfo.fT;
             }
           }
         }
 
-        vPixelColor = vPixelColor + color{ 1.f, 1.f, 1.f } *oHitInfo.fT;
+        vPixelColor = vPixelColor + color{ 1.f, 1.f, 1.f } * fAttenuation;
       }
 
       vPixelColor /= iSAMPLE_COUNT;
