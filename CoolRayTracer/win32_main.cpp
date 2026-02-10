@@ -342,6 +342,30 @@ void HandleGamepadInput()
   }
 }
 
+void SaveBitmap(const char* _aFileName, void* _pData, int _iWidth, int _iHeight)
+{
+  BITMAPFILEHEADER oFileHeader = {};
+  oFileHeader.bfType = 0x4D42; // 'BM'
+  oFileHeader.bfOffBits = sizeof(BITMAPFILEHEADER) + sizeof(BITMAPINFOHEADER);
+  oFileHeader.bfSize = oFileHeader.bfOffBits + (_iWidth * _iHeight * g_uBytesPerPixel);
+  BITMAPINFOHEADER oInfoHeader = {};
+  oInfoHeader.biSize = sizeof(BITMAPINFOHEADER);
+  oInfoHeader.biWidth = _iWidth;
+  oInfoHeader.biHeight = -_iHeight; // Negative height for top-down bitmap
+  oInfoHeader.biPlanes = 1;
+  oInfoHeader.biBitCount = 32;
+  oInfoHeader.biCompression = BI_RGB;
+  HANDLE hFile = CreateFileA(_aFileName, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+  if (hFile != INVALID_HANDLE_VALUE)
+  {
+    DWORD dwBytesWritten;
+    WriteFile(hFile, &oFileHeader, sizeof(oFileHeader), &dwBytesWritten, NULL);
+    WriteFile(hFile, &oInfoHeader, sizeof(oInfoHeader), &dwBytesWritten, NULL);
+    WriteFile(hFile, _pData, _iWidth * _iHeight * g_uBytesPerPixel, &dwBytesWritten, NULL);
+    CloseHandle(hFile);
+  }
+}
+
 LRESULT WndProc(
   HWND _hWnd,
   UINT _uMsg,
@@ -563,9 +587,7 @@ int WINAPI WinMain(
       MyThreadFunction,
       iThreadIdxArray + i,
       0, 0);
-  }
-
-  //WaitForMultipleObjects(THREAD_COUNT, hThreadArray, TRUE, INFINITE);
+  }  
 
   LARGE_INTEGER ilDrawEndTime;
   QueryPerformanceCounter(&ilDrawEndTime);
@@ -643,6 +665,10 @@ int WINAPI WinMain(
 
     ilBeginTime = ilEndTime;
   }
+
+  WaitForMultipleObjects(THREAD_COUNT, hThreadArray, TRUE, INFINITE);
+
+  SaveBitmap("output.bmp", g_oBackBuffer.pData, g_oBackBuffer.iWidth, g_oBackBuffer.iHeight);
 
   return 0;
 }

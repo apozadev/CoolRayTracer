@@ -1,6 +1,7 @@
 ﻿#include "CoolRayTracer.h"
 
 #include "Vec3.h"
+#include "Vec2.h"
 #include "Ray.h"
 #include "MathUtils.h"
 
@@ -9,11 +10,6 @@
 #include <vector>
 
 using color = vec3;
-
-struct vec2
-{
-  float x, y;
-};
 
 enum HittableType
 {
@@ -180,21 +176,21 @@ void UpdateScreenBufferPartial(GameScreenBuffer* Buffer, int _iStartX, int _iSta
       {
         vec3 vPixelCenter = vStartPixel + (x + vOffset.x) * vPixelDeltaX + (y + vOffset.y) * vPixelDeltaY;
         vec3 vRayDirection = Normalize(vPixelCenter - vCameraCenter);
-        ray oRay(vCameraCenter, vRayDirection);
-        HitInfo oHitInfo = {};
-        /*
-         bool bHit = false;
+        ray oRay(vCameraCenter, vRayDirection);        
+        
         color vRayColor = { 1.f, 1.f, 1.f };
 
-        do
+        while(true)
         {
-          bHit = false;
+          bool bHit = false;
+          HitInfo oHitInfo = {};
           color vHitColor = {};
+
           for (const Hittable& oHittable : g_vHittables)
           {
             HitInfo oCandidateHitInfo = {};
 
-            if (HitHittable(oRay, oHittable, oCandidateHitInfo) && oHitInfo.fT == 0.f || oCandidateHitInfo.fT < oHitInfo.fT)
+            if (HitHittable(oRay, oHittable, oCandidateHitInfo) && (oHitInfo.fT == 0.f || oCandidateHitInfo.fT < oHitInfo.fT))
             {
               oHitInfo = oCandidateHitInfo;
               vHitColor = oHittable.vColor;
@@ -202,60 +198,28 @@ void UpdateScreenBufferPartial(GameScreenBuffer* Buffer, int _iStartX, int _iSta
             }
           }
 
-          if (bHit)
+          if (!bHit)
           {
-            vec3 vHeimsphereSample = Normalize(HemisphereSample(Random(), Random()));
-            vec3 vRefractedRay = TangentToWorld(vHeimsphereSample, oHitInfo.vNormal);
-            oRay = ray(oRay.vOrigin + (oHitInfo.fT * oRay.vDir) + (oHitInfo.vNormal * 0.001f), vRefractedRay);
-            vRayColor = vRayColor * vHitColor;
+            break;
           }
-
-        } while (bHit);
-
-        vPixelColor += vRayColor;
-        */
-        bool bHit = false;
-        for (const Hittable& oHittable : g_vHittables)
-        {
-          HitInfo oCandidateHitInfo = {};
-          if (HitHittable(oRay, oHittable, oCandidateHitInfo) && (oHitInfo.fT == 0.f || oCandidateHitInfo.fT < oHitInfo.fT))
-          {
-            oHitInfo = oCandidateHitInfo;
-            bHit = true;
-          }
-        }
-        
-        float fAttenuation = 1.f;
-
-        if (bHit)
-        {
-          vec3 vHeimsphereSample = Normalize(HemisphereSample(Random(), Random()));
-          vec3 vRefractedRay = TangentToWorld(vHeimsphereSample, oHitInfo.vNormal);
+          vec3 vHemisphereSample = Normalize(SampleHemisphereCosine(Random(), Random()));
+          vec3 vRefractedRay = TangentToWorld(vHemisphereSample, oHitInfo.vNormal);
           oRay = ray(oRay.vOrigin + (oHitInfo.fT * oRay.vDir) + (oHitInfo.vNormal * 0.001f), vRefractedRay);
-
-          for (const Hittable& oHittable : g_vHittables)
-          {
-            HitInfo oCandidateHitInfo = {};
-            if (HitHittable(oRay, oHittable, oCandidateHitInfo) && (oHitInfo.fT == 0.f || oCandidateHitInfo.fT < oHitInfo.fT))
-            {
-              oHitInfo = oCandidateHitInfo;
-              fAttenuation = (oHitInfo.fT > 1.f) ? 1.f : oHitInfo.fT * oHitInfo.fT * oHitInfo.fT;
-            }
-          }
+          vRayColor = vRayColor * vHitColor;
         }
 
-        vPixelColor = vPixelColor + color{ 1.f, 1.f, 1.f } * fAttenuation;
+        vPixelColor += vRayColor;        
       }
 
       vPixelColor /= iSAMPLE_COUNT;
 
-      *pPixel++ = static_cast<int8_t>(vPixelColor.b * 255.f);
+      *pPixel++ = static_cast<uint8_t>(vPixelColor.b * 255.f);
 
-      *pPixel++ = static_cast<int8_t>(vPixelColor.g * 255.f);
+      *pPixel++ = static_cast<uint8_t>(vPixelColor.g * 255.f);
 
-      *pPixel++ = static_cast<int8_t>(vPixelColor.r * 255.f);
+      *pPixel++ = static_cast<uint8_t>(vPixelColor.r * 255.f);
 
-      *pPixel++ = 0;
+      *pPixel++ = 0u;
     }
     pRow += uPitch;
   }

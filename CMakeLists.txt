@@ -11,5 +11,8 @@ endif()
 
 project ("CoolRayTracer")
 
+project ("SampleTest")
+
 # Incluya los subproyectos.
 add_subdirectory ("CoolRayTracer")
+add_subdirectory ("SampleTest")
