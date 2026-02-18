@@ -11,7 +11,7 @@
 
 using color = vec3;
 
-constexpr int SAMPLE_COUNT = 1000;
+constexpr int SAMPLE_COUNT = 10000;
 
 vec2 aSamplePoints[SAMPLE_COUNT];
 
@@ -25,7 +25,7 @@ void InitGame()
 
 void UpdateScreenBufferPartial(GameScreenBuffer* Buffer, int _iStartX, int _iStartY, int _iEndX, int _iEndY)
 {
-  const int iPointPixelHalfSize = 2;
+  const int iPointPixelHalfSize = 1;
 
   for (int i = 0; i < SAMPLE_COUNT; i++)
   {

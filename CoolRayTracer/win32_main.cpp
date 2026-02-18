@@ -485,21 +485,21 @@ DWORD WINAPI MyThreadFunction(LPVOID lpParam)
   oGameBuffer.iWidth = g_oBackBuffer.iWidth;
   oGameBuffer.iHeight = g_oBackBuffer.iHeight;
 
- /* int iTileX = iIdx % 3;
+  int iTileX = iIdx % 3;
   int iTileY = iIdx / 3;
 
   int iTileWidth = oGameBuffer.iWidth / 3;
-  int iTileHeight = oGameBuffer.iHeight / 2;
+  int iTileHeight = oGameBuffer.iHeight / 3;
 
   int iStartX = iTileX * iTileWidth;
   int iStartY = iTileY * iTileHeight;
 
   int iEndX = iTileX >= 2 ? oGameBuffer.iWidth : iStartX + iTileWidth;
-  int iEndY = iTileY >= 1 ? oGameBuffer.iHeight : iStartY + iTileHeight;
+  int iEndY = iTileY >= 2 ? oGameBuffer.iHeight : iStartY + iTileHeight;
 
-  UpdateScreenBufferPartial(&oGameBuffer, iStartX, iStartY, iEndX, iEndY);*/
+  UpdateScreenBufferPartial(&oGameBuffer, iStartX, iStartY, iEndX, iEndY);
 
-  UpdateScreenBufferPartial(&oGameBuffer, 0, 0, oGameBuffer.iWidth, oGameBuffer.iHeight);
+  //UpdateScreenBufferPartial(&oGameBuffer, 0, 0, oGameBuffer.iWidth, oGameBuffer.iHeight);
 
   return 0;
 }
@@ -572,7 +572,7 @@ int WINAPI WinMain(
   oGameBuffer.iWidth = g_oBackBuffer.iWidth;
   oGameBuffer.iHeight = g_oBackBuffer.iHeight;
 
-  constexpr int THREAD_COUNT = 1;
+  constexpr int THREAD_COUNT = 9;
 
   HANDLE  hThreadArray[THREAD_COUNT];
   int  iThreadIdxArray[THREAD_COUNT];
@@ -587,23 +587,11 @@ int WINAPI WinMain(
       MyThreadFunction,
       iThreadIdxArray + i,
       0, 0);
-  }  
-
-  LARGE_INTEGER ilDrawEndTime;
-  QueryPerformanceCounter(&ilDrawEndTime);
-
-  LONGLONG ilDrawElapsedTime = ilDrawEndTime.QuadPart - ilDrawStartTime.QuadPart;
-
-  char aBuffer[256];
-  wsprintf(aBuffer, "Draw Time: %ld\n", static_cast<long long>(ilDrawElapsedTime));
-  OutputDebugStringA(aBuffer);
-
-  for (int i = 0; i < THREAD_COUNT; i++)
-  {
-    CloseHandle(hThreadArray[i]);
-  }
+  }      
 
   //UpdateGameBackBuffer(&oGameBuffer, g_oGameInput);
+
+  bool bProcessRunning = true;
 
   MSG msg;
   while (g_bRunning)
@@ -619,56 +607,76 @@ int WINAPI WinMain(
       TranslateMessage(&msg);
       DispatchMessage(&msg);
     }
+    DWORD ulWaitResult = WaitForMultipleObjects(THREAD_COUNT, hThreadArray, TRUE, 0);
 
-    HandleGamepadInput();
-
-    /*GameScreenBuffer oGameBuffer = {};
-    oGameBuffer.pData = g_oBackBuffer.pData;
-    oGameBuffer.iWidth = g_oBackBuffer.iWidth;
-    oGameBuffer.iHeight = g_oBackBuffer.iHeight;
-
-    UpdateGameBackBuffer(&oGameBuffer, g_oGameInput);*/
-
-    UpdateSoundBuffer();
-
-    HDC hDeviceCtx = GetDC(hWnd);
-
-    int iWidth, iHeight;
-    GetWindowDimensions(hWnd, iWidth, iHeight);
-    Win32DisplayBackBuffer(hDeviceCtx, iWidth, iHeight);
-
-    ReleaseDC(hWnd, hDeviceCtx);
-
-    DWORD64 ulEndCycleCount = __rdtsc();
-    DWORD ulElapsedCycleCount = ulEndCycleCount - ulBeginCycleCount;
-    ulBeginCycleCount = ulEndCycleCount;
-
-    LARGE_INTEGER ilEndTime;
-    QueryPerformanceCounter(&ilEndTime);
-
-    LONGLONG ilElapsedTime = ilEndTime.QuadPart - ilBeginTime.QuadPart;
-    if (ilElapsedTime > 0)
+    if (ulWaitResult == WAIT_TIMEOUT || ulWaitResult == WAIT_FAILED)
     {
-      ilElapsedTime = 1000 * ilElapsedTime / ilPerfFrequency.QuadPart;
+      HandleGamepadInput();
+
+      /*GameScreenBuffer oGameBuffer = {};
+      oGameBuffer.pData = g_oBackBuffer.pData;
+      oGameBuffer.iWidth = g_oBackBuffer.iWidth;
+      oGameBuffer.iHeight = g_oBackBuffer.iHeight;
+
+      UpdateGameBackBuffer(&oGameBuffer, g_oGameInput);*/
+
+      UpdateSoundBuffer();
+
+      HDC hDeviceCtx = GetDC(hWnd);
+
+      int iWidth, iHeight;
+      GetWindowDimensions(hWnd, iWidth, iHeight);
+      Win32DisplayBackBuffer(hDeviceCtx, iWidth, iHeight);
+
+      ReleaseDC(hWnd, hDeviceCtx);
+
+      DWORD64 ulEndCycleCount = __rdtsc();
+      DWORD ulElapsedCycleCount = ulEndCycleCount - ulBeginCycleCount;
+      ulBeginCycleCount = ulEndCycleCount;
+
+      LARGE_INTEGER ilEndTime;
+      QueryPerformanceCounter(&ilEndTime);
+
+      LONGLONG ilElapsedTime = ilEndTime.QuadPart - ilBeginTime.QuadPart;
+      if (ilElapsedTime > 0)
+      {
+        ilElapsedTime = 1000 * ilElapsedTime / ilPerfFrequency.QuadPart;
+      }
+
+      LONGLONG ilFPS = 999999;
+
+      if (ilElapsedTime > 0)
+      {
+        ilFPS = 1000 / ilElapsedTime;
+      }
+
+      //char aBuffer[256];
+      //wsprintf(aBuffer, "FPS: %ld \t CPF: %ld\n", static_cast<long long>(ilFPS), static_cast<long long>(ulElapsedCycleCount / (1000 * 1000)));
+      //OutputDebugStringA(aBuffer);
+
+      ilBeginTime = ilEndTime;    
     }
-
-    LONGLONG ilFPS = 999999;
-
-    if (ilElapsedTime > 0)
+    else if(bProcessRunning)
     {
-      ilFPS = 1000 / ilElapsedTime;
+      bProcessRunning = false;
+
+      LARGE_INTEGER ilDrawEndTime;
+      QueryPerformanceCounter(&ilDrawEndTime);
+
+      LONGLONG ilDrawElapsedTime = ilDrawEndTime.QuadPart - ilDrawStartTime.QuadPart;
+
+      char aBuffer[256];
+      wsprintf(aBuffer, "Draw Time: %ld\n", static_cast<long long>(ilDrawElapsedTime));
+      OutputDebugStringA(aBuffer);      
+
+      SaveBitmap("output.bmp", g_oBackBuffer.pData, g_oBackBuffer.iWidth, g_oBackBuffer.iHeight);
     }
+  }  
 
-    //char aBuffer[256];
-    //wsprintf(aBuffer, "FPS: %ld \t CPF: %ld\n", static_cast<long long>(ilFPS), static_cast<long long>(ulElapsedCycleCount / (1000 * 1000)));
-    //OutputDebugStringA(aBuffer);
-
-    ilBeginTime = ilEndTime;
+  for (int i = 0; i < THREAD_COUNT; i++)
+  {
+    CloseHandle(hThreadArray[i]);
   }
-
-  WaitForMultipleObjects(THREAD_COUNT, hThreadArray, TRUE, INFINITE);
-
-  SaveBitmap("output.bmp", g_oBackBuffer.pData, g_oBackBuffer.iWidth, g_oBackBuffer.iHeight);
 
   return 0;
 }
