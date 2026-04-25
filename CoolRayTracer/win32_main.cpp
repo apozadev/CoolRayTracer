@@ -40,12 +40,12 @@ GameInput g_oGameInput = {};
 typedef DWORD WINAPI XInputGetState_t(_In_ DWORD dwUserIndex, _Out_ XINPUT_STATE* pState);
 typedef DWORD WINAPI XInputSetState_t(_In_ DWORD dwUserIndex, _In_ XINPUT_VIBRATION* pVibration);
 
-DWORD WINAPI XInputGetStateStub(_In_ DWORD dwUserIndex, _Out_ XINPUT_STATE* pState)
+DWORD WINAPI XInputGetStateStub(_In_ DWORD /*dwUserIndex*/, _Out_ XINPUT_STATE* /*pState*/)
 {
   return ERROR_DEVICE_NOT_CONNECTED;
 }
 
-DWORD WINAPI XInputSetStateStub(_In_ DWORD dwUserIndex, _In_ XINPUT_VIBRATION* pVibration)
+DWORD WINAPI XInputSetStateStub(_In_ DWORD /*dwUserIndex*/, _In_ XINPUT_VIBRATION* /*pVibration*/)
 {
   return ERROR_DEVICE_NOT_CONNECTED;
 }
@@ -71,7 +71,7 @@ void Win32LoadXInput()
 
 typedef HRESULT WINAPI DirectSoundCreate_t(_In_opt_ LPCGUID pcGuidDevice, _Outptr_ LPDIRECTSOUND* ppDS, _Pre_null_ LPUNKNOWN pUnkOuter);
 
-HRESULT DirectSoundCreateStub(_In_opt_ LPCGUID pcGuidDevice, _Outptr_ LPDIRECTSOUND* ppDS, _Pre_null_ LPUNKNOWN pUnkOuter)
+HRESULT DirectSoundCreateStub(_In_opt_ LPCGUID /*pcGuidDevice*/, _Outptr_ LPDIRECTSOUND* /*ppDS*/, _Pre_null_ LPUNKNOWN /*pUnkOuter*/)
 {
   return 0;
 }
@@ -139,7 +139,7 @@ void Win32InitDirectSound(HWND _hWnd)
 
 void UpdateSoundBuffer()
 {
-  int iHalfWavePeriod = (48000 / 512) / 2;
+  //int iHalfWavePeriod = (48000 / 512) / 2;
 
   DWORD ulWriteCursor;
   DWORD ulPlayCursor;
@@ -417,7 +417,7 @@ LRESULT WndProc(
     bool bWasDown = (_lParam & (1 << 30)) != 0;
     bool bIsDown = (_lParam & (1 << 31)) != 0;
 
-    bool bPress = bIsDown && !bWasDown;
+    //bool bPress = bIsDown && !bWasDown;
     bool bRelease = !bIsDown && bWasDown;
 
     if (uVKCode == 'W')
@@ -476,16 +476,16 @@ struct vec2
   float y;
 };
 
-DWORD WINAPI MyThreadFunction(LPVOID lpParam)
+DWORD WINAPI MyThreadFunction(LPVOID /*lpParam*/)
 {
-  int iIdx = *((int*)lpParam);
+  //int iIdx = *((int*)lpParam);
 
   GameScreenBuffer oGameBuffer = {};
   oGameBuffer.pData = g_oBackBuffer.pData;
   oGameBuffer.iWidth = g_oBackBuffer.iWidth;
   oGameBuffer.iHeight = g_oBackBuffer.iHeight;
 
-  int iTileX = iIdx % 3;
+  /*int iTileX = iIdx % 3;
   int iTileY = iIdx / 3;
 
   int iTileWidth = oGameBuffer.iWidth / 3;
@@ -497,9 +497,9 @@ DWORD WINAPI MyThreadFunction(LPVOID lpParam)
   int iEndX = iTileX >= 2 ? oGameBuffer.iWidth : iStartX + iTileWidth;
   int iEndY = iTileY >= 2 ? oGameBuffer.iHeight : iStartY + iTileHeight;
 
-  UpdateScreenBufferPartial(&oGameBuffer, iStartX, iStartY, iEndX, iEndY);
+  UpdateScreenBufferPartial(&oGameBuffer, iStartX, iStartY, iEndX, iEndY);*/
 
-  //UpdateScreenBufferPartial(&oGameBuffer, 0, 0, oGameBuffer.iWidth, oGameBuffer.iHeight);
+  UpdateScreenBufferPartial(&oGameBuffer, 0, 0, oGameBuffer.iWidth, oGameBuffer.iHeight);
 
   return 0;
 }
@@ -565,14 +565,14 @@ int WINAPI WinMain(
   LARGE_INTEGER ilBeginTime;
   QueryPerformanceCounter(&ilBeginTime);
 
-  DWORD64 ulBeginCycleCount = __rdtsc();
+  //DWORD64 ulBeginCycleCount = __rdtsc();
 
   GameScreenBuffer oGameBuffer = {};
   oGameBuffer.pData = g_oBackBuffer.pData;
   oGameBuffer.iWidth = g_oBackBuffer.iWidth;
   oGameBuffer.iHeight = g_oBackBuffer.iHeight;
 
-  constexpr int THREAD_COUNT = 9;
+  constexpr int THREAD_COUNT = 1;
 
   HANDLE  hThreadArray[THREAD_COUNT];
   int  iThreadIdxArray[THREAD_COUNT];
@@ -592,8 +592,7 @@ int WINAPI WinMain(
   //UpdateGameBackBuffer(&oGameBuffer, g_oGameInput);
 
   bool bProcessRunning = true;
-
-  MSG msg;
+  
   while (g_bRunning)
   {
     MSG msg;
@@ -630,11 +629,11 @@ int WINAPI WinMain(
 
       ReleaseDC(hWnd, hDeviceCtx);
 
-      DWORD64 ulEndCycleCount = __rdtsc();
-      DWORD ulElapsedCycleCount = ulEndCycleCount - ulBeginCycleCount;
-      ulBeginCycleCount = ulEndCycleCount;
+     /* DWORD64 ulEndCycleCount = __rdtsc();
+      DWORD64 ulElapsedCycleCount = ulEndCycleCount - ulBeginCycleCount;
+      ulBeginCycleCount = ulEndCycleCount;*/
 
-      LARGE_INTEGER ilEndTime;
+     /* LARGE_INTEGER ilEndTime;
       QueryPerformanceCounter(&ilEndTime);
 
       LONGLONG ilElapsedTime = ilEndTime.QuadPart - ilBeginTime.QuadPart;
@@ -648,13 +647,13 @@ int WINAPI WinMain(
       if (ilElapsedTime > 0)
       {
         ilFPS = 1000 / ilElapsedTime;
-      }
+      }*/
 
       //char aBuffer[256];
       //wsprintf(aBuffer, "FPS: %ld \t CPF: %ld\n", static_cast<long long>(ilFPS), static_cast<long long>(ulElapsedCycleCount / (1000 * 1000)));
       //OutputDebugStringA(aBuffer);
 
-      ilBeginTime = ilEndTime;    
+      //ilBeginTime = ilEndTime;    
     }
     else if(bProcessRunning)
     {

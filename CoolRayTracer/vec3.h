@@ -7,19 +7,14 @@ class vec3
 {
 public:
 
-  union
-  {
-    struct { double x, y, z; };
-    struct { double r, g, b; };
-    double e[3];
-  };
+    float e[3];  
 
   vec3() : e{ 0,0,0 } {}
-  vec3(double e0, double e1, double e2) : e{ e0, e1, e2 } {}
+  vec3(float e0, float e1, float e2) : e{ e0, e1, e2 } {}
 
   vec3 operator-() const { return vec3(-e[0], -e[1], -e[2]); }
-  double operator[](int i) const { return e[i]; }
-  double& operator[](int i) { return e[i]; }
+  float operator[](int i) const { return e[i]; }
+  float& operator[](int i) { return e[i]; }
 
   vec3& operator+=(const vec3& v)
   {
@@ -29,7 +24,7 @@ public:
     return *this;
   }
 
-  vec3& operator*=(double t)
+  vec3& operator*=(float t)
   {
     e[0] *= t;
     e[1] *= t;
@@ -37,32 +32,48 @@ public:
     return *this;
   }
 
-  vec3& operator/=(double t)
+  vec3& operator/=(float t)
   {
     return *this *= 1 / t;
   }
 
-  double Length() const
+  float Length() const
   {
     return std::sqrt(LengthSqr());
   }
 
-  double LengthSqr() const
+  float LengthSqr() const
   {
     return e[0] * e[0] + e[1] * e[1] + e[2] * e[2];
   }
 
   void Normalize()
   {
-    double len = Length();
+    float len = Length();
     if (len > 0)
     {
-      double invLen = 1 / len;
+      float invLen = 1 / len;
       e[0] *= invLen;
       e[1] *= invLen;
       e[2] *= invLen;
     }
   }
+
+  float x() const { return e[0]; }
+  float y() const { return e[1]; }
+  float z() const { return e[2]; }
+
+  float& x() { return e[0]; }
+  float& y() { return e[1]; }
+  float& z() { return e[2]; }
+
+  float r() const { return e[0]; }
+  float g() const { return e[1]; }
+  float b() const { return e[2]; }
+
+  float& r() { return e[0]; }
+  float& g() { return e[1]; }
+  float& b() { return e[2]; }
 };
 
 // point3 is just an alias for vec3, but useful for geometric clarity in the code.
@@ -91,22 +102,32 @@ inline vec3 operator*(const vec3& u, const vec3& v)
   return vec3(u.e[0] * v.e[0], u.e[1] * v.e[1], u.e[2] * v.e[2]);
 }
 
-inline vec3 operator*(double t, const vec3& v)
+inline vec3 operator*(float t, const vec3& v)
 {
   return vec3(t * v.e[0], t * v.e[1], t * v.e[2]);
 }
 
-inline vec3 operator*(const vec3& v, double t)
+inline vec3 operator*(const vec3& v, float t)
 {
   return t * v;
 }
 
-inline vec3 operator/(const vec3& v, double t)
+inline vec3 operator+(float t, const vec3& v)
+{
+  return vec3(v.x() + t, v.y() + t, v.z() + t);;
+}
+
+inline vec3 operator+(const vec3& v, float t)
+{
+  return t + v;
+}
+
+inline vec3 operator/(const vec3& v, float t)
 {
   return (1 / t) * v;
 }
 
-inline double Dot(const vec3& u, const vec3& v)
+inline float Dot(const vec3& u, const vec3& v)
 {
   return u.e[0] * v.e[0]
     + u.e[1] * v.e[1]
