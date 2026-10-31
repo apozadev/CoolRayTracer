@@ -9,6 +9,7 @@
 #include <math.h>
 #include <cmath>
 #include <vector>
+#include <cfloat>
 
 using color = vec3;
 
@@ -46,7 +47,7 @@ struct Material
 struct Sphere
 {
   SimdVec4 vCenter;
-  float fRadius;
+  float fRadiusSqr;
 };
 
 struct Plane
@@ -65,12 +66,6 @@ struct Hittable
   };
 };
 
-struct HitInfo
-{
-  float fT;
-  vec3 vNormal;
-};
-
 struct Scene
 {
   std::vector<Hittable> vHittables;
@@ -79,25 +74,30 @@ struct Scene
 
 Scene g_oScene = {};
 
-bool HitSphere(const SimdRay& _oRay, const Sphere& _oSphere, HitInfo& oHitInfo_)
+// Ray directions are normalized (a == 1), so the quadratic uses the half-b form:
+// h = dot(oc, dir), disc = h^2 - c, t = -h -+ sqrt(disc).
+// Only computes t; the normal is computed once for the closest hit (see HitNormal).
+bool HitSphere(const SimdRay& _oRay, const Sphere& _oSphere, float& fT_)
 {
   const SimdVec4 vSphereToRay = _oRay.vOrigin - _oSphere.vCenter;
-  constexpr float a = 1.0f;
-  const float b = 2.0f * Dot(vSphereToRay, _oRay.vDir);
-  const float c = Dot(vSphereToRay, vSphereToRay) - (_oSphere.fRadius * _oSphere.fRadius);
-  const float discriminant = (b * b) - (4 * a * c);
-  if (discriminant > 0)
+  const float h = Dot(vSphereToRay, _oRay.vDir);
+  const float c = Dot(vSphereToRay, vSphereToRay) - _oSphere.fRadiusSqr;
+
+  const float discriminant = (h * h) - c;
+
+  // Origin outside the sphere and pointing away from it: both roots are behind the ray.
+  // Tested after the discriminant, which rejects most spheres with a well-predicted branch.
+  if (discriminant > 0 && !(c > 0.f && h > 0.f))
   {
     const float sqrtDisc = sqrtf(discriminant);
-    const float t0 = (-b - sqrtDisc) / (2.0f * a);
-    const float t1 = (-b + sqrtDisc) / (2.0f * a);    
+    const float t0 = -h - sqrtDisc;
+    const float t1 = -h + sqrtDisc;
 
     const float fT = (t0 > 0.f) ? t0 : ((t1 > 0.f) ? t1 : -1.f);
-    
+
     if (fT > 0.001f)
     {
-      oHitInfo_.fT = fT;
-      oHitInfo_.vNormal = Normalize((_oRay.vOrigin + (oHitInfo_.fT * _oRay.vDir)) - _oSphere.vCenter).ToVec3();
+      fT_ = fT;
       return true;
     }
   }
@@ -105,7 +105,7 @@ bool HitSphere(const SimdRay& _oRay, const Sphere& _oSphere, HitInfo& oHitInfo_)
   return false;
 }
 
-bool HitPlane(const ray& _oRay, const Plane& _oPlane, HitInfo& oHitInfo_)
+bool HitPlane(const ray& _oRay, const Plane& _oPlane, float& fT_)
 {
   const float fDenom = Dot(_oPlane.vNormal, _oRay.vDir);
   if (fabs(fDenom) > 0.0001f)
@@ -113,29 +113,41 @@ bool HitPlane(const ray& _oRay, const Plane& _oPlane, HitInfo& oHitInfo_)
     const float fT = (_oPlane.fPoint - Dot(_oPlane.vNormal, _oRay.vOrigin)) / fDenom;
     if (fT >= 0)
     {
-      oHitInfo_.fT = fT;
-      oHitInfo_.vNormal = _oPlane.vNormal;
+      fT_ = fT;
       return true;
     }
   }
   return false;
 }
 
-bool HitHittable(const ray& _oRay, const SimdRay& _oSimdRay, const Hittable& _oHittable, HitInfo& oHitInfo)
+bool HitHittable(const ray& _oRay, const SimdRay& _oSimdRay, const Hittable& _oHittable, float& fT_)
 {
   switch (_oHittable.eType)
   {
   case HittableType_Sphere:
   {
-    return HitSphere(_oSimdRay, _oHittable.oSphere, oHitInfo);
+    return HitSphere(_oSimdRay, _oHittable.oSphere, fT_);
   } break;
   case HittableType_Plane:
   {
-    return HitPlane(_oRay, _oHittable.oPlane, oHitInfo);
-  } break;      
+    return HitPlane(_oRay, _oHittable.oPlane, fT_);
+  } break;
   }
 
   return false;
+}
+
+vec3 HitNormal(const SimdRay& _oSimdRay, float _fT, const Hittable& _oHittable)
+{
+  switch (_oHittable.eType)
+  {
+  case HittableType_Sphere:
+    return Normalize((_oSimdRay.vOrigin + (_fT * _oSimdRay.vDir)) - _oHittable.oSphere.vCenter).ToVec3();
+  case HittableType_Plane:
+    return _oHittable.oPlane.vNormal;
+  }
+
+  return vec3(0.f, 1.f, 0.f);
 }
 
 vec3 Reflect(const vec3& _voutRay, const vec3& _vNormal)
@@ -199,7 +211,7 @@ void InitGame()
     Hittable oSphere = {};
     oSphere.eType = HittableType_Sphere;
     oSphere.oSphere.vCenter = SimdVec4(fPosX, -1 + fRadius, fPosZ);
-    oSphere.oSphere.fRadius = fRadius;
+    oSphere.oSphere.fRadiusSqr = fRadius * fRadius;
 
     Material oMaterial = {};
     oMaterial.eType = eMatType;
@@ -299,18 +311,17 @@ void UpdateScreenBufferPartial(GameScreenBuffer* Buffer, int _iStartX, int _iSta
         while(true)
         {
           int iHittableIdx = -1;
-          HitInfo oHitInfo = {};
+          float fClosestT = FLT_MAX;
 
           // Convert once per bounce, not once per sphere test
           const SimdRay oSimdRay = { SimdVec4(oRay.vOrigin), SimdVec4(oRay.vDir) };
 
           for (int i = 0; i < g_oScene.vHittables.size(); i++)
           {
-            const Hittable& oHittable = g_oScene.vHittables[i];
-            HitInfo oCandidateHitInfo = {};
-            if (HitHittable(oRay, oSimdRay, oHittable, oCandidateHitInfo) && (oHitInfo.fT == 0.f || oCandidateHitInfo.fT < oHitInfo.fT))
+            float fCandidateT;
+            if (HitHittable(oRay, oSimdRay, g_oScene.vHittables[i], fCandidateT) && fCandidateT < fClosestT)
             {
-              oHitInfo = oCandidateHitInfo;
+              fClosestT = fCandidateT;
               iHittableIdx = i;
             }
           }
@@ -331,28 +342,29 @@ void UpdateScreenBufferPartial(GameScreenBuffer* Buffer, int _iStartX, int _iSta
             break;
           }
 
-          const Material& oMaterial = g_oScene.vMaterials[iHittableIdx];          
-          
+          const Material& oMaterial = g_oScene.vMaterials[iHittableIdx];
+          const vec3 vHitNormal = HitNormal(oSimdRay, fClosestT, g_oScene.vHittables[iHittableIdx]);
+
           vec3 vInRay = {};
           switch (oMaterial.eType)
           {
           case MaterialType_Lambertian:
-            vInRay = TangentToWorld(Normalize(SampleHemisphereCosine(Random(), Random())), oHitInfo.vNormal);
+            vInRay = TangentToWorld(Normalize(SampleHemisphereCosine(Random(), Random())), vHitNormal);
             break;
           case MaterialType_Metal:
-            vInRay = Reflect(oRay.vDir, oHitInfo.vNormal);
+            vInRay = Reflect(oRay.vDir, vHitNormal);
             break;
           case MaterialType_Dielectric:
           {
-            const bool bFromOutside = Dot(oRay.vDir, oHitInfo.vNormal) < 0.0f;
+            const bool bFromOutside = Dot(oRay.vDir, vHitNormal) < 0.0f;
             const float fRelativeRefractionIndex = bFromOutside
               ? (g_fAirRefractionIndex / oMaterial.oDielectric.fRefractionIndex)
               : (oMaterial.oDielectric.fRefractionIndex / g_fAirRefractionIndex);
 
-            vInRay = Refract(oRay.vDir, oHitInfo.vNormal, fRelativeRefractionIndex);
+            vInRay = Refract(oRay.vDir, vHitNormal, fRelativeRefractionIndex);
             if(vInRay.LengthSqr() == 0.f) // Total internal reflection, fallback to reflection
             {
-              vInRay = Reflect(oRay.vDir, oHitInfo.vNormal);
+              vInRay = Reflect(oRay.vDir, vHitNormal);
             }
             break;
           }
@@ -360,10 +372,10 @@ void UpdateScreenBufferPartial(GameScreenBuffer* Buffer, int _iStartX, int _iSta
             break;
           }
 
-          const vec3 vBias = Dot(vInRay, oHitInfo.vNormal) > 0.0f
-            ? oHitInfo.vNormal * 0.001f
-            : -oHitInfo.vNormal * 0.001f;
-          oRay = ray(oRay.vOrigin + (oHitInfo.fT * oRay.vDir) + vBias, vInRay);
+          const vec3 vBias = Dot(vInRay, vHitNormal) > 0.0f
+            ? vHitNormal * 0.001f
+            : -vHitNormal * 0.001f;
+          oRay = ray(oRay.vOrigin + (fClosestT * oRay.vDir) + vBias, vInRay);
           vRayColor = vRayColor * oMaterial.vAlbedo;                    
 
           iBounces++;

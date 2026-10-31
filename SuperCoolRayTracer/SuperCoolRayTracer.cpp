@@ -39,12 +39,6 @@ struct Material
   };
 };
 
-struct HitInfo
-{
-  float fT;
-  vec3 vNormal;
-};
-
 struct Scene
 {
   std::vector<Material> vMaterials;
@@ -54,12 +48,15 @@ struct Scene
   std::vector<float> vPosY;
   std::vector<float> vPosZ;
 
-  // Sphere radii
-  std::vector<float> vRadius;  
+  // Sphere radii squared
+  std::vector<float> vRadiusSqr;
 
 };
 
 Scene g_oScene = {};
+
+// Ground plane at y = -1, same material as the plane in CoolRayTracer
+const Material g_oPlaneMaterial = { MaterialType_Lambertian, color(0.5f, 0.5f, 0.5f) };
 
 struct HitSphere8Result
 {
@@ -73,9 +70,13 @@ HitSphere8Result HitSphere8(
   const float* centerX,
   const float* centerY,
   const float* centerZ,
-  const float* radius,
+  const float* radiusSqr,
   int validCount)
 {
+  HitSphere8Result oResult = {};
+  oResult.t = FLT_MAX;
+  oResult.idx = -1;
+
   // Ray origin
   const __m256 rox = _mm256_set1_ps(rayOrigin.x());
   const __m256 roy = _mm256_set1_ps(rayOrigin.y());
@@ -91,55 +92,61 @@ HitSphere8Result HitSphere8(
   const __m256 cy = _mm256_loadu_ps(centerY);
   const __m256 cz = _mm256_loadu_ps(centerZ);
 
-  // Sphere radii
-  const __m256 r = _mm256_loadu_ps(radius);
+  // Sphere radii squared
+  const __m256 r2 = _mm256_loadu_ps(radiusSqr);
 
   // oc = rayOrigin - sphereCenter
   const __m256 ocx = _mm256_sub_ps(rox, cx);
   const __m256 ocy = _mm256_sub_ps(roy, cy);
   const __m256 ocz = _mm256_sub_ps(roz, cz);
 
-  // a = dot(rayDir, rayDir)
-  //const __m256 a = _mm256_add_ps(_mm256_add_ps(_mm256_mul_ps(rdx, rdx), _mm256_mul_ps(rdy, rdy)), _mm256_mul_ps(rdz, rdz));
-
-  // b = 2.0f * dot(oc, rayDir)
-  const __m256 b = _mm256_mul_ps(_mm256_set1_ps(2.0f), _mm256_add_ps(_mm256_mul_ps(ocx, rdx), _mm256_add_ps(_mm256_mul_ps(ocy, rdy), _mm256_mul_ps(ocz, rdz))));
+  // rayDir is normalized (a == 1), so use the half-b form:
+  // h = dot(oc, rayDir), disc = h^2 - c, t = -h -+ sqrt(disc).
+  // Dot products sum as (x + y) + z to match the scalar vec3 Dot.
+  const __m256 h = _mm256_add_ps(_mm256_add_ps(_mm256_mul_ps(ocx, rdx), _mm256_mul_ps(ocy, rdy)), _mm256_mul_ps(ocz, rdz));
 
   // c = dot(oc, oc) - radius^2
-  const __m256 c = _mm256_sub_ps(_mm256_add_ps(_mm256_mul_ps(ocx, ocx), _mm256_add_ps(_mm256_mul_ps(ocy, ocy), _mm256_mul_ps(ocz, ocz))), _mm256_mul_ps(r, r));
+  const __m256 c = _mm256_sub_ps(_mm256_add_ps(_mm256_add_ps(_mm256_mul_ps(ocx, ocx), _mm256_mul_ps(ocy, ocy)), _mm256_mul_ps(ocz, ocz)), r2);
 
-  // discriminant = b^2 - 4ac (a == 1 since rayDir is normalized)
-  const __m256 discriminant = _mm256_sub_ps(_mm256_mul_ps(b, b), _mm256_mul_ps(c, _mm256_set1_ps(4.0f)));
+  // discriminant = h^2 - c
+  const __m256 discriminant = _mm256_sub_ps(_mm256_mul_ps(h, h), c);
 
-  // mask for valid hits (discriminant > 0)
   const __m256 zero = _mm256_setzero_ps();
-  const __m256 hitMask = _mm256_cmp_ps(discriminant, zero, _CMP_GT_OQ);
 
-  // sqrtDiscriminant = sqrt(discriminant)
-  const __m256 sqrtDiscriminant = _mm256_sqrt_ps(discriminant);  
-
-  const __m256 denom = _mm256_set1_ps(2.f);
-
-  // t0 = (-b - sqrtDiscriminant) / (2.0f * a)
-  const __m256 t0 = _mm256_div_ps(_mm256_sub_ps(_mm256_sub_ps(zero, b), sqrtDiscriminant), denom);
-
-  // t1 = (-b + sqrtDiscriminant) / (2.0f * a)
-  const __m256 t1 = _mm256_div_ps(_mm256_sub_ps(_mm256_sub_ps(zero, b), _mm256_sub_ps(zero, sqrtDiscriminant)), denom);
-
-  // t = (t0 > 0.f) ? t0 : ((t1 > 0.f) ? t1 : -1.f);
-  const __m256 t0ValidMask = _mm256_cmp_ps(t0, _mm256_set1_ps(0.f), _CMP_GT_OQ);
-  const __m256 t1ValidMask = _mm256_cmp_ps(t1, _mm256_set1_ps(0.f), _CMP_GT_OQ);
-  const __m256 t = _mm256_blendv_ps(_mm256_blendv_ps(_mm256_set1_ps(-1.f), t1, t1ValidMask), t0, t0ValidMask);
-
-  // mask for t > 0.001f (to avoid self-intersection)
-  const __m256 tValidMask = _mm256_cmp_ps(t, _mm256_set1_ps(0.001f), _CMP_GT_OQ);
+  // Origin outside the sphere and pointing away from it: both roots are behind the ray
+  const __m256 awayMask = _mm256_and_ps(_mm256_cmp_ps(c, zero, _CMP_GT_OQ), _mm256_cmp_ps(h, zero, _CMP_GT_OQ));
 
   // mask out padding lanes past the last real sphere
   const __m256 laneIdx = _mm256_setr_ps(0.f, 1.f, 2.f, 3.f, 4.f, 5.f, 6.f, 7.f);
   const __m256 laneValidMask = _mm256_cmp_ps(laneIdx, _mm256_set1_ps(static_cast<float>(validCount)), _CMP_LT_OQ);
 
-  // final hit mask combines discriminant > 0, t > 0.001f and lane validity
-  const __m256 finalHitMask = _mm256_and_ps(_mm256_and_ps(hitMask, tValidMask), laneValidMask);
+  // candidate lanes: discriminant > 0, not pointing away, real sphere
+  const __m256 hitMask = _mm256_andnot_ps(awayMask, _mm256_and_ps(_mm256_cmp_ps(discriminant, zero, _CMP_GT_OQ), laneValidMask));
+
+  // Whole group misses: skip the sqrt and the reduction
+  if (_mm256_movemask_ps(hitMask) == 0)
+  {
+    return oResult;
+  }
+
+  // sqrtDiscriminant = sqrt(discriminant)
+  const __m256 sqrtDiscriminant = _mm256_sqrt_ps(discriminant);
+
+  // t0 = -h - sqrtDiscriminant, t1 = -h + sqrtDiscriminant
+  const __m256 negH = _mm256_sub_ps(zero, h);
+  const __m256 t0 = _mm256_sub_ps(negH, sqrtDiscriminant);
+  const __m256 t1 = _mm256_add_ps(negH, sqrtDiscriminant);
+
+  // t = (t0 > 0.f) ? t0 : ((t1 > 0.f) ? t1 : -1.f);
+  const __m256 t0ValidMask = _mm256_cmp_ps(t0, zero, _CMP_GT_OQ);
+  const __m256 t1ValidMask = _mm256_cmp_ps(t1, zero, _CMP_GT_OQ);
+  const __m256 t = _mm256_blendv_ps(_mm256_blendv_ps(_mm256_set1_ps(-1.f), t1, t1ValidMask), t0, t0ValidMask);
+
+  // mask for t > 0.001f (to avoid self-intersection)
+  const __m256 tValidMask = _mm256_cmp_ps(t, _mm256_set1_ps(0.001f), _CMP_GT_OQ);
+
+  // final hit mask combines candidate lanes and t > 0.001f
+  const __m256 finalHitMask = _mm256_and_ps(hitMask, tValidMask);
 
   // Set t to infinity for invalid hits
   const __m256 inf = _mm256_set1_ps(FLT_MAX);
@@ -148,11 +155,6 @@ HitSphere8Result HitSphere8(
   // Store T values to search for the smallest
   alignas(32) float tValues[8];
   _mm256_store_ps(tValues, validT);
-
-  HitSphere8Result oResult = {};
-
-  oResult.t = FLT_MAX;
-  oResult.idx = -1;
 
   for (int i = 0; i < 8; i++)
   {
@@ -252,15 +254,15 @@ void InitGame()
     g_oScene.vPosX.push_back(fPosX);
     g_oScene.vPosY.push_back(fPosY);
     g_oScene.vPosZ.push_back(fPosZ);
-    g_oScene.vRadius.push_back(fRadius);
+    g_oScene.vRadiusSqr.push_back(fRadius * fRadius);
   }
 
   // Pad sphere arrays to a multiple of 8 so HitSphere8 loads stay in bounds
-  /*const size_t uPaddedCount = (g_oScene.vRadius.size() + 7) & ~size_t(7);
+  const size_t uPaddedCount = (g_oScene.vRadiusSqr.size() + 7) & ~size_t(7);
   g_oScene.vPosX.resize(uPaddedCount, 0.f);
   g_oScene.vPosY.resize(uPaddedCount, 0.f);
   g_oScene.vPosZ.resize(uPaddedCount, 0.f);
-  g_oScene.vRadius.resize(uPaddedCount, 0.f);*/
+  g_oScene.vRadiusSqr.resize(uPaddedCount, 0.f);
 }
 
 void UpdateScreenBufferPartial(GameScreenBuffer* Buffer, int _iStartX, int _iStartY, int _iEndX, int _iEndY)
@@ -331,7 +333,7 @@ void UpdateScreenBufferPartial(GameScreenBuffer* Buffer, int _iStartX, int _iSta
           const int iSphereCount = static_cast<int>(g_oScene.vMaterials.size());
           for (int i = 0; i < iSphereCount; i += 8)
           {
-            HitSphere8Result oHitResult = HitSphere8(oRay.vOrigin, oRay.vDir, &g_oScene.vPosX[i], &g_oScene.vPosY[i], &g_oScene.vPosZ[i], &g_oScene.vRadius[i], iSphereCount - i);
+            HitSphere8Result oHitResult = HitSphere8(oRay.vOrigin, oRay.vDir, &g_oScene.vPosX[i], &g_oScene.vPosY[i], &g_oScene.vPosZ[i], &g_oScene.vRadiusSqr[i], iSphereCount - i);
 
             if (oHitResult.idx != -1 && oHitResult.t < fClosestT)
             {
@@ -340,19 +342,21 @@ void UpdateScreenBufferPartial(GameScreenBuffer* Buffer, int _iStartX, int _iSta
             }
           }
 
-          // Check plane hit
-          float fPlaneT = FLT_MAX;          
+          // Check plane hit (after the spheres, so it only wins when strictly closer)
+          bool bHitPlane = false;
+          float fPlaneT = FLT_MAX;
           HitPlane(oRay, fPlaneT);
           if (fPlaneT < fClosestT)
           {
             fClosestT = fPlaneT;
-            iHittableIdx = -1;
-          }          
-          else if (iHittableIdx < 0)
+            bHitPlane = true;
+          }
+
+          if (iHittableIdx < 0 && !bHitPlane)
           {
             // Blue-white gradient sky color
             float t = 0.5f * (oRay.vDir.y() + 1.0f);
-            vRayColor = vRayColor * ((1.0f - t) * vec3(1, 1, 1) + t * vec3(0.5f, 0.7f, 1.0f));            
+            vRayColor = vRayColor * ((1.0f - t) * vec3(1, 1, 1) + t * vec3(0.5f, 0.7f, 1.0f));
             break;
           }
           else if (iBounces > iMAX_BOUNCES)
@@ -365,30 +369,23 @@ void UpdateScreenBufferPartial(GameScreenBuffer* Buffer, int _iStartX, int _iSta
           vec3 vHitNormal;
           Material oMaterial;
 
-          if (iHittableIdx >= 0)
+          if (bHitPlane)
           {
-            // Hit sphere
-            vHitNormal = Normalize(oRay.vOrigin + fClosestT * oRay.vDir - vec3(g_oScene.vPosX[iHittableIdx], g_oScene.vPosY[iHittableIdx], g_oScene.vPosZ[iHittableIdx]));
-            oMaterial = g_oScene.vMaterials[iHittableIdx];
+            vHitNormal = vec3(0, 1, 0);
+            oMaterial = g_oPlaneMaterial;
           }
           else
           {
-            // Hit plane
-            vHitNormal = vec3(0, 1, 0);
-            oMaterial.eType = MaterialType_Lambertian;
-            oMaterial.vAlbedo = vec3(0.5f, 0.5f, 0.5f);
+            vHitNormal = Normalize(oRay.vOrigin + fClosestT * oRay.vDir - vec3(g_oScene.vPosX[iHittableIdx], g_oScene.vPosY[iHittableIdx], g_oScene.vPosZ[iHittableIdx]));
+            oMaterial = g_oScene.vMaterials[iHittableIdx];
           }
 
           vec3 vInRay = {};
           switch (oMaterial.eType)
           {
           case MaterialType_Lambertian:
-          {
-            float fSkyScale = 1.0f;
-            vInRay = SampleHemisphereCosineSkyImportance(Random(), Random(), vHitNormal, fSkyScale);
-            vRayColor = vRayColor * oMaterial.vAlbedo * fSkyScale;
+            vInRay = TangentToWorld(Normalize(SampleHemisphereCosine(Random(), Random())), vHitNormal);
             break;
-          }
           case MaterialType_Metal:
             vInRay = Reflect(oRay.vDir, vHitNormal);
             break;

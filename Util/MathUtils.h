@@ -2,6 +2,7 @@
 
 #include "Vec3.h"
 #include "Vec2.h"
+#include "Random.h"
 
 constexpr float fPI = 3.14159265359f;
 constexpr float fPI_2 = fPI / 2.0f;
@@ -75,10 +76,6 @@ inline float AverageSkyIntensity(const vec3& _vNormal)
   return 0.5f * (fExpectedWorldY + 1.0f);
 }
 
-inline float Random()
-{
-  return static_cast<float>(rand()) / static_cast<float>(RAND_MAX);
-}
 
 inline vec3 SampleHemisphere(float _fRandom1, float _fRandom2)
 {

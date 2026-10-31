@@ -2,8 +2,7 @@
 #
 # Runs each target with -bench (render once, write drawtime.txt, exit), alternating
 # targets every run so thermal/background drift affects all of them equally. Prints
-# per-run times, min/median/mean/max per target, and whether the first two targets
-# produced byte-identical output.bmp files.
+# per-run times and min/median/mean/max per target.
 #
 # Build the preset first, e.g.:
 #   cmake --build out/build/x64-release
@@ -11,12 +10,14 @@
 # Usage:
 #   .\bench.ps1
 #   .\bench.ps1 -Runs 10
+#   .\bench.ps1 -Threads 16          (0 = all logical processors)
 #   .\bench.ps1 -Targets CoolRayTracer,CoolerRayTracer -Preset x64-release
 
 param(
   [int]$Runs = 1,
   [string[]]$Targets = @("CoolRayTracer", "CoolerRayTracer", "SuperCoolRayTracer"),
-  [string]$Preset = "x64-release"
+  [string]$Preset = "x64-release",
+  [int]$Threads = 1
 )
 
 $root = Join-Path $PSScriptRoot "out\build\$Preset"
@@ -32,7 +33,7 @@ for ($i = 1; $i -le $Runs; $i++) {
     $dir = Join-Path $root $t
     $timeFile = Join-Path $dir "drawtime.txt"
     Remove-Item $timeFile -ErrorAction SilentlyContinue
-    Start-Process -FilePath (Join-Path $dir "$t.exe") -ArgumentList "-bench" -WorkingDirectory $dir -Wait
+    Start-Process -FilePath (Join-Path $dir "$t.exe") -ArgumentList "-bench -threads $Threads" -WorkingDirectory $dir -Wait
     $ms = [double]::Parse((Get-Content $timeFile), [Globalization.CultureInfo]::InvariantCulture)
     $results[$t] += $ms
     Write-Output ("run {0} {1,-20} {2,10:F2} ms" -f $i, $t, $ms)

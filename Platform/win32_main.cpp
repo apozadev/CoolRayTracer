@@ -8,6 +8,7 @@
 #include <string.h>
 
 #include "GameIncludes.h"
+#include "Random.h"
 
 static bool g_bRunning = true;
 
@@ -478,32 +479,84 @@ struct vec2
   float y;
 };
 
-DWORD WINAPI MyThreadFunction(LPVOID /*lpParam*/)
-{
-  //int iIdx = *((int*)lpParam);
+// The render is split into square tiles that worker threads pull from a shared counter.
+// Keep the tile size a multiple of 16 px: with 4-byte pixels a tile row is then a whole
+// number of 64-byte cache lines, so two tiles never write to the same line (no false sharing).
+static constexpr int g_iTileSize = 32;
 
+// WaitForMultipleObjects can wait on at most this many handles
+static constexpr int g_iMaxRenderThreads = MAXIMUM_WAIT_OBJECTS;
+
+// Next tile to render. Every worker increments it, so it gets a cache line to itself
+// instead of invalidating whatever globals the linker would otherwise place next to it.
+struct alignas(64) TileQueue
+{
+  volatile LONG lNextTile;
+  char aPadding[64 - sizeof(LONG)];
+};
+
+static TileQueue g_oTileQueue = {};
+
+// Integer hash (lowbias32) to turn a tile index into a well-mixed RNG seed
+static uint32_t HashTileIndex(uint32_t _uIdx)
+{
+  _uIdx ^= _uIdx >> 16;
+  _uIdx *= 0x7feb352du;
+  _uIdx ^= _uIdx >> 15;
+  _uIdx *= 0x846ca68bu;
+  _uIdx ^= _uIdx >> 16;
+  return _uIdx;
+}
+
+DWORD WINAPI RenderWorkerThread(LPVOID /*lpParam*/)
+{
   GameScreenBuffer oGameBuffer = {};
   oGameBuffer.pData = g_oBackBuffer.pData;
   oGameBuffer.iWidth = g_oBackBuffer.iWidth;
   oGameBuffer.iHeight = g_oBackBuffer.iHeight;
 
-  /*int iTileX = iIdx % 3;
-  int iTileY = iIdx / 3;
+  const int iTilesX = (oGameBuffer.iWidth + g_iTileSize - 1) / g_iTileSize;
+  const int iTilesY = (oGameBuffer.iHeight + g_iTileSize - 1) / g_iTileSize;
+  const int iTileCount = iTilesX * iTilesY;
 
-  int iTileWidth = oGameBuffer.iWidth / 3;
-  int iTileHeight = oGameBuffer.iHeight / 3;
+  while (true)
+  {
+    const int iTile = InterlockedIncrement(&g_oTileQueue.lNextTile) - 1;
+    if (iTile >= iTileCount)
+    {
+      break;
+    }
 
-  int iStartX = iTileX * iTileWidth;
-  int iStartY = iTileY * iTileHeight;
+    const int iStartX = (iTile % iTilesX) * g_iTileSize;
+    const int iStartY = (iTile / iTilesX) * g_iTileSize;
+    const int iEndX = min(iStartX + g_iTileSize, oGameBuffer.iWidth);
+    const int iEndY = min(iStartY + g_iTileSize, oGameBuffer.iHeight);
 
-  int iEndX = iTileX >= 2 ? oGameBuffer.iWidth : iStartX + iTileWidth;
-  int iEndY = iTileY >= 2 ? oGameBuffer.iHeight : iStartY + iTileHeight;
+    // Seed per tile, not per thread, so the image is the same for any thread count or scheduling
+    SeedRandom(HashTileIndex(static_cast<uint32_t>(iTile)));
 
-  UpdateScreenBufferPartial(&oGameBuffer, iStartX, iStartY, iEndX, iEndY);*/
-
-  UpdateScreenBufferPartial(&oGameBuffer, 0, 0, oGameBuffer.iWidth, oGameBuffer.iHeight);
+    UpdateScreenBufferPartial(&oGameBuffer, iStartX, iStartY, iEndX, iEndY);
+  }
 
   return 0;
+}
+
+// -threads N: number of render threads (default 1, 0 = all logical processors)
+static int ParseThreadCount(const char* _pCmdLine)
+{
+  int iThreadCount = 1;
+
+  const char* pArg = _pCmdLine ? strstr(_pCmdLine, "-threads") : nullptr;
+  if (pArg)
+  {
+    iThreadCount = atoi(pArg + strlen("-threads"));
+    if (iThreadCount <= 0)
+    {
+      iThreadCount = static_cast<int>(GetActiveProcessorCount(ALL_PROCESSOR_GROUPS));
+    }
+  }
+
+  return max(1, min(iThreadCount, g_iMaxRenderThreads));
 }
 
 int WINAPI WinMain(
@@ -515,6 +568,8 @@ int WINAPI WinMain(
 {
   // -bench: write draw time to drawtime.txt and quit as soon as the render finishes
   const bool bBenchMode = lpCmdLine && strstr(lpCmdLine, "-bench") != nullptr;
+
+  const int iThreadCount = ParseThreadCount(lpCmdLine);
 
   Win32LoadXInput();
 
@@ -577,22 +632,18 @@ int WINAPI WinMain(
   oGameBuffer.iWidth = g_oBackBuffer.iWidth;
   oGameBuffer.iHeight = g_oBackBuffer.iHeight;
 
-  constexpr int THREAD_COUNT = 1;
-
-  HANDLE  hThreadArray[THREAD_COUNT];
-  int  iThreadIdxArray[THREAD_COUNT];
+  HANDLE hThreadArray[g_iMaxRenderThreads] = {};
 
   LARGE_INTEGER ilDrawStartTime;
   QueryPerformanceCounter(&ilDrawStartTime);
 
-  for (int i = 0; i < THREAD_COUNT; i++)
+  for (int i = 0; i < iThreadCount; i++)
   {
-    iThreadIdxArray[i] = i;
     hThreadArray[i] = CreateThread(0, 0,
-      MyThreadFunction,
-      iThreadIdxArray + i,
+      RenderWorkerThread,
+      nullptr,
       0, 0);
-  }      
+  }
 
   //UpdateGameBackBuffer(&oGameBuffer, g_oGameInput);
 
@@ -612,7 +663,9 @@ int WINAPI WinMain(
       DispatchMessage(&msg);
     }
 
-    DWORD ulWaitResult = WaitForMultipleObjects(THREAD_COUNT, hThreadArray, TRUE, 0);
+    // Sleep until the workers finish or ~16 ms pass, then repaint. Polling with a zero
+    // timeout here would keep a whole core busy and slow the render threads down.
+    DWORD ulWaitResult = WaitForMultipleObjects(iThreadCount, hThreadArray, TRUE, bProcessRunning ? 16 : 0);
 
     if (ulWaitResult == WAIT_TIMEOUT || ulWaitResult == WAIT_FAILED)
     {
@@ -698,9 +751,14 @@ int WINAPI WinMain(
         g_bRunning = false;
       }
     }
-  }  
+    else if (g_bRunning)
+    {
+      // Render finished: block until the next window message instead of spinning
+      WaitMessage();
+    }
+  }
 
-  for (int i = 0; i < THREAD_COUNT; i++)
+  for (int i = 0; i < iThreadCount; i++)
   {
     CloseHandle(hThreadArray[i]);
   }
