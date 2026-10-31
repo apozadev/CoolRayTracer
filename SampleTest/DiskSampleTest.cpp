@@ -1,9 +1,9 @@
-#include "../CoolRayTracer/CoolRayTracer.h"
+#include "GameIncludes.h"
 
-#include "../CoolRayTracer/Vec3.h"
-#include "../CoolRayTracer/Vec2.h"
-#include "../CoolRayTracer/Ray.h"
-#include "../CoolRayTracer/MathUtils.h"
+#include "Vec3.h"
+#include "Vec2.h"
+#include "Ray.h"
+#include "MathUtils.h"
 
 #include <math.h>
 #include <cmath>
@@ -34,8 +34,8 @@ void UpdateScreenBufferPartial(GameScreenBuffer* Buffer, int _iStartX, int _iSta
     float fAspectRatio = static_cast<float>(Buffer->iHeight) / Buffer->iWidth;
 
     // Remap to account for the point pixel radius, so that the points are not cut off at the edges of the screen.
-    int iScreenX = static_cast<int>((vSamplePoint.x + 1.f) * 0.5f * (Buffer->iWidth * fAspectRatio - 2 * iPointPixelHalfSize) + iPointPixelHalfSize);
-    int iScreenY = static_cast<int>((vSamplePoint.y + 1.f) * 0.5f * (Buffer->iHeight - 2 * iPointPixelHalfSize) + iPointPixelHalfSize);
+    int iScreenX = static_cast<int>((vSamplePoint.x() + 1.f) * 0.5f * (Buffer->iWidth * fAspectRatio - 2 * iPointPixelHalfSize) + iPointPixelHalfSize);
+    int iScreenY = static_cast<int>((vSamplePoint.y() + 1.f) * 0.5f * (Buffer->iHeight - 2 * iPointPixelHalfSize) + iPointPixelHalfSize);
 
     int iMinX = std::max(iScreenX - iPointPixelHalfSize, _iStartX);
     int iMaxX = std::min(iScreenX + iPointPixelHalfSize, _iEndX);
@@ -56,16 +56,16 @@ void UpdateScreenBufferPartial(GameScreenBuffer* Buffer, int _iStartX, int _iSta
         *pPixel++ = 0u;   // Alpha (unused)
       }
       pRow += uPitch;
-    }
+    }    
   }
 }
 
 void UpdateGameSoundBuffer(
-  uint32_t& uCurrSampleIdx,
-  void* pRegion1,
-  size_t uRegion1Size,
-  void* pRegion2,
-  size_t uRegion2Size,
-  size_t uBytesPerSample)
+  uint32_t& /*uCurrSampleIdx*/,
+  void* /*pRegion1*/,
+  size_t /*uRegion1Size*/,
+  void* /*pRegion2*/,
+  size_t /*uRegion2Size*/,
+  size_t /*uBytesPerSample*/)
 {
 }

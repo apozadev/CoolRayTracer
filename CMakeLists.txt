@@ -9,10 +9,17 @@ if (POLICY CMP0141)
   set(CMAKE_MSVC_DEBUG_INFORMATION_FORMAT "$<IF:$<AND:$<C_COMPILER_ID:MSVC>,$<CXX_COMPILER_ID:MSVC>>,$<$<CONFIG:Debug,RelWithDebInfo>:EditAndContinue>,$<$<CONFIG:Debug,RelWithDebInfo>:ProgramDatabase>>")
 endif()
 
+# Make Release mode emit PDB for compiled artifacts
+add_compile_options("$<$<CONFIG:RELEASE>:/Zi>")
+add_link_options("$<$<CONFIG:RELEASE>:/DEBUG>") 
+
 project ("CoolRayTracer")
+
+project ("SuperCoolRayTracer")
 
 project ("SampleTest")
 
 # Incluya los subproyectos.
 add_subdirectory ("CoolRayTracer")
+add_subdirectory ("SuperCoolRayTracer")
 add_subdirectory ("SampleTest")

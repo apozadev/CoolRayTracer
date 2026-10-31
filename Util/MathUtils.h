@@ -63,6 +63,23 @@ inline vec3 SampleHemisphereCosine(float _fRandom1, float _fRandom2)
   return vec3(vDiskSample.x(), vDiskSample.y(), fZ);
 }
 
+inline float SkyIntensity(const vec3& _vWorldDir)
+{
+  const float t = 0.5f * (_vWorldDir.y() + 1.0f);
+  return clamp(t, 0.0f, 1.0f);
+}
+
+inline float AverageSkyIntensity(const vec3& _vNormal)
+{
+  const float fExpectedWorldY = Dot(_vNormal, vec3(0.f, 1.f, 0.f)) / 3.0f;
+  return 0.5f * (fExpectedWorldY + 1.0f);
+}
+
+inline float Random()
+{
+  return static_cast<float>(rand()) / static_cast<float>(RAND_MAX);
+}
+
 inline vec3 SampleHemisphere(float _fRandom1, float _fRandom2)
 {
   float fPhi = 2.0f * fPI * _fRandom1;
@@ -95,7 +112,29 @@ inline vec3 TangentToWorld(vec3 _vDir, vec3 _vNormal)
   return vWorldDir;
 }
 
-float Random()
+inline vec3 SampleHemisphereCosineSkyImportance(float _fRandom1, float _fRandom2, const vec3& _vNormal, float& _fOutScale)
 {
-  return static_cast<float>(rand()) / static_cast<float>(RAND_MAX);
+  const float fAvgIntensity = AverageSkyIntensity(_vNormal);
+  while (true)
+  {
+    const vec3 vLocalDir = SampleHemisphereCosine(_fRandom1, _fRandom2);
+    const vec3 vWorldDir = TangentToWorld(vLocalDir, _vNormal);
+    const float fWeight = SkyIntensity(vWorldDir);
+
+    if (fWeight <= 0.0f)
+    {
+      _fRandom1 = Random();
+      _fRandom2 = Random();
+      continue;
+    }
+
+    if (Random() < fWeight)
+    {
+      _fOutScale = fAvgIntensity / fWeight;
+      return vWorldDir;
+    }
+
+    _fRandom1 = Random();
+    _fRandom2 = Random();
+  }
 }

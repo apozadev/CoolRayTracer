@@ -3,11 +3,13 @@
 #
 
 # Agregue un origen al ejecutable de este proyecto.
-add_executable (CoolRayTracer WIN32 "CoolRayTracer.cpp" "win32_main.cpp" "Vec2.h")
+add_executable (CoolRayTracer WIN32 "CoolRayTracer.cpp" "../Platform/win32_main.cpp")
 
 if (CMAKE_VERSION VERSION_GREATER 3.12)
   set_property(TARGET CoolRayTracer PROPERTY CXX_STANDARD 20)
 endif()
+
+target_include_directories(CoolRayTracer PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/../Util")
 
 # TODO: Agregue pruebas y destinos de instalación si es necesario.
 

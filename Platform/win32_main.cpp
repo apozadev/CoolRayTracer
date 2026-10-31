@@ -5,7 +5,7 @@
 #include <math.h>
 #include <cmath>
 
-#include "CoolRayTracer.h"
+#include "GameIncludes.h"
 
 static bool g_bRunning = true;
 
@@ -591,7 +591,7 @@ int WINAPI WinMain(
 
   //UpdateGameBackBuffer(&oGameBuffer, g_oGameInput);
 
-  bool bProcessRunning = true;
+  bool bProcessRunning = true;  
   
   while (g_bRunning)
   {
@@ -606,6 +606,7 @@ int WINAPI WinMain(
       TranslateMessage(&msg);
       DispatchMessage(&msg);
     }
+
     DWORD ulWaitResult = WaitForMultipleObjects(THREAD_COUNT, hThreadArray, TRUE, 0);
 
     if (ulWaitResult == WAIT_TIMEOUT || ulWaitResult == WAIT_FAILED)
@@ -619,7 +620,7 @@ int WINAPI WinMain(
 
       UpdateGameBackBuffer(&oGameBuffer, g_oGameInput);*/
 
-      UpdateSoundBuffer();
+      UpdateSoundBuffer();      
 
       HDC hDeviceCtx = GetDC(hWnd);
 
@@ -667,6 +668,12 @@ int WINAPI WinMain(
       char aBuffer[256];
       wsprintf(aBuffer, "Draw Time: %ld\n", static_cast<long long>(ilDrawElapsedTime));
       OutputDebugStringA(aBuffer);      
+
+      // Draw one last time to make sure we see the final result
+      HDC hDeviceCtx = GetDC(hWnd);
+      int iWidth, iHeight;
+      GetWindowDimensions(hWnd, iWidth, iHeight);
+      Win32DisplayBackBuffer(hDeviceCtx, iWidth, iHeight);
 
       SaveBitmap("output.bmp", g_oBackBuffer.pData, g_oBackBuffer.iWidth, g_oBackBuffer.iHeight);
     }

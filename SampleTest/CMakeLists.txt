@@ -3,13 +3,13 @@
 #
 
 # Agregue un origen al ejecutable de este proyecto.
-add_executable (SampleTest WIN32 "DiskSampleTest.cpp" "../CoolRayTracer/win32_main.cpp")
+add_executable (SampleTest WIN32 "DiskSampleTest.cpp" "../Platform/win32_main.cpp")
 
 if (CMAKE_VERSION VERSION_GREATER 3.12)
   set_property(TARGET SampleTest PROPERTY CXX_STANDARD 20)
 endif()
 
-# TODO: Agregue pruebas y destinos de instalación si es necesario.
+target_include_directories(SampleTest PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/../Util")
 
 # Add maximum warning levels for different compilers
 if (MSVC)

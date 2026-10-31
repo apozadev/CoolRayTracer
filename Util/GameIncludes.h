@@ -1,18 +1,16 @@
-﻿#pragma once
+#pragma once
 
 #include <stdint.h>
 
-struct GameScreenBuffer
-{
-  void* pData;
-  int iWidth;
-  int iHeight;
+struct GameScreenBuffer {
+    void* pData;
+    int iWidth;
+    int iHeight;
 };
 
-struct GameInput
-{
-  float XOffset = 0.f;
-  float YOffset = 0.f;
+struct GameInput {
+    float XOffset;
+    float YOffset;    
 };
 
 static constexpr size_t g_uBytesPerPixel = 4;

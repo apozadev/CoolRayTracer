@@ -1,4 +1,4 @@
-﻿#include "CoolRayTracer.h"
+﻿#include "GameIncludes.h"
 
 #include "Vec3.h"
 #include "Vec2.h"
@@ -11,7 +11,7 @@
 
 using color = vec3;
 
-float g_fAirRefractionIndex = 1.0f;
+const float g_fAirRefractionIndex = 1.0f;
 
 enum MaterialType
 {
@@ -38,7 +38,7 @@ struct Material
     struct
     {
       float fRefractionIndex;
-    } oDielectric;;
+    } oDielectric;
   };
 };
 
@@ -80,18 +80,18 @@ Scene g_oScene = {};
 
 bool HitSphere(const ray& _oRay, const Sphere& _oSphere, HitInfo& oHitInfo_)
 {
-  vec3 vSphereToRay = _oRay.vOrigin - _oSphere.vCenter;
-  float a = Dot(_oRay.vDir, _oRay.vDir);
-  float b = 2.0f * Dot(vSphereToRay, _oRay.vDir);
-  float c = Dot(vSphereToRay, vSphereToRay) - (_oSphere.fRadius * _oSphere.fRadius);
-  float discriminant = (b * b) - (4 * a * c);
+  const vec3 vSphereToRay = _oRay.vOrigin - _oSphere.vCenter;
+  const float a = Dot(_oRay.vDir, _oRay.vDir);
+  const float b = 2.0f * Dot(vSphereToRay, _oRay.vDir);
+  const float c = Dot(vSphereToRay, vSphereToRay) - (_oSphere.fRadius * _oSphere.fRadius);
+  const float discriminant = (b * b) - (4 * a * c);
   if (discriminant > 0)
   {
-    float sqrtDisc = sqrtf(discriminant);
-    float t0 = (-b - sqrtDisc) / (2.0f * a);
-    float t1 = (-b + sqrtDisc) / (2.0f * a);    
+    const float sqrtDisc = sqrtf(discriminant);
+    const float t0 = (-b - sqrtDisc) / (2.0f * a);
+    const float t1 = (-b + sqrtDisc) / (2.0f * a);    
 
-    float fT = (t0 > 0.f) ? t0 : ((t1 > 0.f) ? t1 : -1.f);
+    const float fT = (t0 > 0.f) ? t0 : ((t1 > 0.f) ? t1 : -1.f);
     
     if (fT > 0.001f)
     {
@@ -106,10 +106,10 @@ bool HitSphere(const ray& _oRay, const Sphere& _oSphere, HitInfo& oHitInfo_)
 
 bool HitPlane(const ray& _oRay, const Plane& _oPlane, HitInfo& oHitInfo_)
 {
-  float fDenom = Dot(_oPlane.vNormal, _oRay.vDir);
+  const float fDenom = Dot(_oPlane.vNormal, _oRay.vDir);
   if (fabs(fDenom) > 0.0001f)
   {
-    float fT = (_oPlane.fPoint - Dot(_oPlane.vNormal, _oRay.vOrigin)) / fDenom;
+    const float fT = (_oPlane.fPoint - Dot(_oPlane.vNormal, _oRay.vOrigin)) / fDenom;
     if (fT >= 0)
     {
       oHitInfo_.fT = fT;
@@ -178,45 +178,43 @@ float LinearToGamma(float _fValue)
 
 void InitGame()
 {
-  {
+  const float fRadiusMax = 3.0f;
+  const float fRadiusMin = 0.2f;
+
+  const float fPosXMin = -10.f;
+  const float fPosXMax = 10.f;
+  const float fPosZMin = -20.f;
+  const float fPosZMax = 0.f;
+
+  for (int i = 0; i < 80; i++)
+  {    
+    const float fRadius = Random() * (fRadiusMax - fRadiusMin) + fRadiusMin;
+
+    const float fPosX = (Random() - 0.5f) * 2.0f * (fPosXMax - fPosXMin) + fPosXMin;
+    const float fPosZ = (Random() - 0.5f) * 2.0f * (fPosZMax - fPosZMin) + fPosZMin;    
+
+    const MaterialType eMatType = static_cast<MaterialType>(Random() * 2.99f);
+
     Hittable oSphere = {};
     oSphere.eType = HittableType_Sphere;
-    oSphere.oSphere.vCenter = vec3(0, 0, -5);
-    oSphere.oSphere.fRadius = 1.0f;
+    oSphere.oSphere.vCenter = vec3(fPosX, -1 + fRadius, fPosZ);
+    oSphere.oSphere.fRadius = fRadius;
 
     Material oMaterial = {};
-    oMaterial.eType = MaterialType_Dielectric;
-    oMaterial.oDielectric.fRefractionIndex = 1.5f;
-    oMaterial.vAlbedo = vec3(1, 1, 1);
+    oMaterial.eType = eMatType;
+    switch (oMaterial.eType)
+    {
+    case MaterialType_Lambertian:      
+      break;
+    case MaterialType_Metal:
+      oMaterial.oMetal.fRoughness = 0.f;
+      break;
+    case MaterialType_Dielectric:
+      oMaterial.oDielectric.fRefractionIndex = 1.5f;
+      break;
+    } 
 
-    g_oScene.vHittables.push_back(oSphere);
-    g_oScene.vMaterials.push_back(oMaterial);
-  }
-
-  {
-    Hittable oSphere = {};
-    oSphere.eType = HittableType_Sphere;
-    oSphere.oSphere.vCenter = vec3(2, 0, -5);
-    oSphere.oSphere.fRadius = 1.0f;
-
-    Material oMaterial = {};
-    oMaterial.eType = MaterialType_Metal;
-    oMaterial.oMetal.fRoughness = 0.2f;
-    oMaterial.vAlbedo = vec3(1, 1, 1);
-
-    g_oScene.vHittables.push_back(oSphere);
-    g_oScene.vMaterials.push_back(oMaterial);
-  }
-
-  {
-    Hittable oSphere = {};
-    oSphere.eType = HittableType_Sphere;
-    oSphere.oSphere.vCenter = vec3(-2.f, -0.75f, -4.f);
-    oSphere.oSphere.fRadius = 0.25f;
-
-    Material oMaterial = {};
-    oMaterial.eType = MaterialType_Lambertian;    
-    oMaterial.vAlbedo = vec3(0.35f, 0.2f, 0.5f);
+    oMaterial.vAlbedo = vec3(Random(), Random(), Random());    
 
     g_oScene.vHittables.push_back(oSphere);
     g_oScene.vMaterials.push_back(oMaterial);
@@ -241,26 +239,30 @@ void UpdateScreenBufferPartial(GameScreenBuffer* Buffer, int _iStartX, int _iSta
 {
   //Camera
 
-  float fFocalLength = 1.0f;
-  float fViewportHeight = 1.0f;
-  float fViewportWidth = fViewportHeight * (float(Buffer->iWidth) / Buffer->iHeight);
+  const float fFocalLength = 1.0f;
+  const float fViewportHeight = 1.0f;
+  const float fViewportWidth = fViewportHeight * (float(Buffer->iWidth) / Buffer->iHeight);
   //float fAspectRatio = fViewportWidth / fViewportHeight;
-  vec3 vCameraCenter = vec3(0, 0, 0);
+  const vec3 vCameraCenter = vec3(0, 3, 8);
 
-  vec3 vViewportX = vec3(fViewportWidth, 0, 0);
-  vec3 vViewportY = vec3(0, -fViewportHeight, 0);
+  const vec3 vCameraForward = Normalize(vec3(0, -0.25, -1));
+  const vec3 vCameraRight = Normalize(Cross(vec3(0, 1, 0), vCameraForward));
+  const vec3 vCameraUp = Cross(vCameraForward, vCameraRight);
 
-  vec3 vPixelDeltaX = vViewportX / float(Buffer->iWidth);
-  vec3 vPixelDeltaY = vViewportY / float(Buffer->iHeight);
+  const vec3 vViewportX = vCameraRight * fViewportWidth;
+  const vec3 vViewportY = -vCameraUp * fViewportHeight;
 
-  vec3 vViewportUpperLeft = vCameraCenter - (vViewportX / 2) - (vViewportY / 2) - (vec3(0, 0, fFocalLength));
-  vec3 vStartPixel = vViewportUpperLeft + (vPixelDeltaX / 2) + (vPixelDeltaY / 2);
+  const vec3 vPixelDeltaX = vViewportX / float(Buffer->iWidth);
+  const vec3 vPixelDeltaY = vViewportY / float(Buffer->iHeight);
 
-  constexpr int iMAX_BOUNCES = 4;
+  const vec3 vViewportUpperLeft = vCameraCenter - (vViewportX / 2) - (vViewportY / 2) + vCameraForward * fFocalLength;
+  const vec3 vStartPixel = vViewportUpperLeft + (vPixelDeltaX / 2) + (vPixelDeltaY / 2);
 
-  constexpr int iSAMPLE_COUNT = 8;
+  const int iMAX_BOUNCES = 4;
 
-  vec2 aOffsets[iSAMPLE_COUNT] = {
+  const int iSAMPLE_COUNT = 8;
+
+  const vec2 aOffsets[iSAMPLE_COUNT] = {
       { 1.f / 1,  1.f / -3 },
       { 1.f / -1,  1.f / 3 },
       { 1.f / 5,  1.f / 1 },
@@ -271,9 +273,9 @@ void UpdateScreenBufferPartial(GameScreenBuffer* Buffer, int _iStartX, int _iSta
       { 1.f / 7,  1.f / -7 }
   };
 
-  int uPitch = Buffer->iWidth * g_uBytesPerPixel;
+  const int uPitch = Buffer->iWidth * g_uBytesPerPixel;
 
-  uint8_t* pRow = ((uint8_t*)Buffer->pData) + uPitch * _iStartY;
+  const uint8_t* pRow = ((uint8_t*)Buffer->pData) + uPitch * _iStartY;
 
   for (int y = _iStartY; y < _iEndY; y++)
   {
@@ -282,10 +284,11 @@ void UpdateScreenBufferPartial(GameScreenBuffer* Buffer, int _iStartX, int _iSta
     {
       color vPixelColor = { 0.f, 0.f, 0.f };
 
-      for (vec2 vOffset : aOffsets)
+      for (const vec2& vOffset : aOffsets)
       {
-        vec3 vPixelCenter = vStartPixel + (x + vOffset.x()) * vPixelDeltaX + (y + vOffset.y()) * vPixelDeltaY;
-        vec3 vRayDirection = Normalize(vPixelCenter - vCameraCenter);
+        const vec3 vPixelCenter = vStartPixel + (x + vOffset.x()) * vPixelDeltaX + (y + vOffset.y()) * vPixelDeltaY;
+        const vec3 vRayDirection = Normalize(vPixelCenter - vCameraCenter);
+
         ray oRay(vCameraCenter, vRayDirection);
         
         color vRayColor = { 1.f, 1.f, 1.f };
@@ -337,8 +340,8 @@ void UpdateScreenBufferPartial(GameScreenBuffer* Buffer, int _iStartX, int _iSta
             break;
           case MaterialType_Dielectric:
           {
-            bool bFromOutside = Dot(oRay.vDir, oHitInfo.vNormal) < 0.0f;
-            float fRelativeRefractionIndex = bFromOutside
+            const bool bFromOutside = Dot(oRay.vDir, oHitInfo.vNormal) < 0.0f;
+            const float fRelativeRefractionIndex = bFromOutside
               ? (g_fAirRefractionIndex / oMaterial.oDielectric.fRefractionIndex)
               : (oMaterial.oDielectric.fRefractionIndex / g_fAirRefractionIndex);
 
@@ -353,7 +356,7 @@ void UpdateScreenBufferPartial(GameScreenBuffer* Buffer, int _iStartX, int _iSta
             break;
           }
 
-          vec3 vBias = Dot(vInRay, oHitInfo.vNormal) > 0.0f
+          const vec3 vBias = Dot(vInRay, oHitInfo.vNormal) > 0.0f
             ? oHitInfo.vNormal * 0.001f
             : -oHitInfo.vNormal * 0.001f;
           oRay = ray(oRay.vOrigin + (oHitInfo.fT * oRay.vDir) + vBias, vInRay);
