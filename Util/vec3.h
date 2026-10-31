@@ -2,7 +2,6 @@
 
 #include <cmath>
 #include <iostream>
-#include <immintrin.h>
 
 class vec3
 {
@@ -89,8 +88,7 @@ inline std::ostream& operator<<(std::ostream& out, const vec3& v)
 }
 
 inline vec3 operator+(const vec3& u, const vec3& v)
-{
-  __m128 vecU = _mm_loadu_ps(u.e);
+{  
   return vec3(u.e[0] + v.e[0], u.e[1] + v.e[1], u.e[2] + v.e[2]);
 }
 

@@ -81,7 +81,7 @@ Scene g_oScene = {};
 bool HitSphere(const ray& _oRay, const Sphere& _oSphere, HitInfo& oHitInfo_)
 {
   const vec3 vSphereToRay = _oRay.vOrigin - _oSphere.vCenter;
-  const float a = Dot(_oRay.vDir, _oRay.vDir);
+  constexpr float a = 1.0f;
   const float b = 2.0f * Dot(vSphereToRay, _oRay.vDir);
   const float c = Dot(vSphereToRay, vSphereToRay) - (_oSphere.fRadius * _oSphere.fRadius);
   const float discriminant = (b * b) - (4 * a * c);

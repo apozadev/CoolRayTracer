@@ -4,6 +4,8 @@
 #include <dsound.h>
 #include <math.h>
 #include <cmath>
+#include <stdio.h>
+#include <string.h>
 
 #include "GameIncludes.h"
 
@@ -507,10 +509,13 @@ DWORD WINAPI MyThreadFunction(LPVOID /*lpParam*/)
 int WINAPI WinMain(
   HINSTANCE hInstance,
   HINSTANCE,
-  LPSTR,
+  LPSTR lpCmdLine,
   int
 )
 {
+  // -bench: write draw time to drawtime.txt and quit as soon as the render finishes
+  const bool bBenchMode = lpCmdLine && strstr(lpCmdLine, "-bench") != nullptr;
+
   Win32LoadXInput();
 
   WNDCLASS oWndClass = {};
@@ -664,10 +669,21 @@ int WINAPI WinMain(
       QueryPerformanceCounter(&ilDrawEndTime);
 
       LONGLONG ilDrawElapsedTime = ilDrawEndTime.QuadPart - ilDrawStartTime.QuadPart;
+      const double dDrawElapsedMs = 1000.0 * static_cast<double>(ilDrawElapsedTime) / static_cast<double>(ilPerfFrequency.QuadPart);
 
       char aBuffer[256];
-      wsprintf(aBuffer, "Draw Time: %ld\n", static_cast<long long>(ilDrawElapsedTime));
-      OutputDebugStringA(aBuffer);      
+      sprintf_s(aBuffer, "Draw Time: %.2f ms\n", dDrawElapsedMs);
+      OutputDebugStringA(aBuffer);
+
+      if (bBenchMode)
+      {
+        FILE* pFile = nullptr;
+        if (fopen_s(&pFile, "drawtime.txt", "w") == 0 && pFile)
+        {
+          fprintf(pFile, "%.2f\n", dDrawElapsedMs);
+          fclose(pFile);
+        }
+      }
 
       // Draw one last time to make sure we see the final result
       HDC hDeviceCtx = GetDC(hWnd);
@@ -676,6 +692,11 @@ int WINAPI WinMain(
       Win32DisplayBackBuffer(hDeviceCtx, iWidth, iHeight);
 
       SaveBitmap("output.bmp", g_oBackBuffer.pData, g_oBackBuffer.iWidth, g_oBackBuffer.iHeight);
+
+      if (bBenchMode)
+      {
+        g_bRunning = false;
+      }
     }
   }  
 

@@ -73,7 +73,8 @@ HitSphere8Result HitSphere8(
   const float* centerX,
   const float* centerY,
   const float* centerZ,
-  const float* radius)
+  const float* radius,
+  int validCount)
 {
   // Ray origin
   const __m256 rox = _mm256_set1_ps(rayOrigin.x());
@@ -99,7 +100,7 @@ HitSphere8Result HitSphere8(
   const __m256 ocz = _mm256_sub_ps(roz, cz);
 
   // a = dot(rayDir, rayDir)
-  const __m256 a = _mm256_add_ps(_mm256_add_ps(_mm256_mul_ps(rdx, rdx), _mm256_mul_ps(rdy, rdy)), _mm256_mul_ps(rdz, rdz));
+  //const __m256 a = _mm256_add_ps(_mm256_add_ps(_mm256_mul_ps(rdx, rdx), _mm256_mul_ps(rdy, rdy)), _mm256_mul_ps(rdz, rdz));
 
   // b = 2.0f * dot(oc, rayDir)
   const __m256 b = _mm256_mul_ps(_mm256_set1_ps(2.0f), _mm256_add_ps(_mm256_mul_ps(ocx, rdx), _mm256_add_ps(_mm256_mul_ps(ocy, rdy), _mm256_mul_ps(ocz, rdz))));
@@ -107,8 +108,8 @@ HitSphere8Result HitSphere8(
   // c = dot(oc, oc) - radius^2
   const __m256 c = _mm256_sub_ps(_mm256_add_ps(_mm256_mul_ps(ocx, ocx), _mm256_add_ps(_mm256_mul_ps(ocy, ocy), _mm256_mul_ps(ocz, ocz))), _mm256_mul_ps(r, r));
 
-  // discriminant = b^2 - 4ac
-  const __m256 discriminant = _mm256_sub_ps(_mm256_mul_ps(b, b), _mm256_mul_ps(_mm256_mul_ps(a, c), _mm256_set1_ps(4.0f)));
+  // discriminant = b^2 - 4ac (a == 1 since rayDir is normalized)
+  const __m256 discriminant = _mm256_sub_ps(_mm256_mul_ps(b, b), _mm256_mul_ps(c, _mm256_set1_ps(4.0f)));
 
   // mask for valid hits (discriminant > 0)
   const __m256 zero = _mm256_setzero_ps();
@@ -117,7 +118,7 @@ HitSphere8Result HitSphere8(
   // sqrtDiscriminant = sqrt(discriminant)
   const __m256 sqrtDiscriminant = _mm256_sqrt_ps(discriminant);  
 
-  const __m256 denom = _mm256_add_ps(a, a);
+  const __m256 denom = _mm256_set1_ps(2.f);
 
   // t0 = (-b - sqrtDiscriminant) / (2.0f * a)
   const __m256 t0 = _mm256_div_ps(_mm256_sub_ps(_mm256_sub_ps(zero, b), sqrtDiscriminant), denom);
@@ -133,8 +134,12 @@ HitSphere8Result HitSphere8(
   // mask for t > 0.001f (to avoid self-intersection)
   const __m256 tValidMask = _mm256_cmp_ps(t, _mm256_set1_ps(0.001f), _CMP_GT_OQ);
 
-  // final hit mask combines discriminant > 0 and t > 0.001f
-  const __m256 finalHitMask = _mm256_and_ps(hitMask, tValidMask);
+  // mask out padding lanes past the last real sphere
+  const __m256 laneIdx = _mm256_setr_ps(0.f, 1.f, 2.f, 3.f, 4.f, 5.f, 6.f, 7.f);
+  const __m256 laneValidMask = _mm256_cmp_ps(laneIdx, _mm256_set1_ps(static_cast<float>(validCount)), _CMP_LT_OQ);
+
+  // final hit mask combines discriminant > 0, t > 0.001f and lane validity
+  const __m256 finalHitMask = _mm256_and_ps(_mm256_and_ps(hitMask, tValidMask), laneValidMask);
 
   // Set t to infinity for invalid hits
   const __m256 inf = _mm256_set1_ps(FLT_MAX);
@@ -217,15 +222,15 @@ void InitGame()
   const float fPosZMin = -20.f;
   const float fPosZMax = 0.f;
 
-  for (int i = 0; i < 20/*8 * 10*/; i++)
+  for (int i = 0; i < 80; i++)
   {
     const float fRadius = Random() * (fRadiusMax - fRadiusMin) + fRadiusMin;
 
     const float fPosX = (Random() - 0.5f) * 2.0f * (fPosXMax - fPosXMin) + fPosXMin;
     const float fPosZ = (Random() - 0.5f) * 2.0f * (fPosZMax - fPosZMin) + fPosZMin;
-    const float fPosY = -1.0f + fRadius; // Ensure spheres are above the plane
+    const float fPosY = -1.0f + fRadius; 
 
-    const MaterialType eMatType = MaterialType_Dielectric;//static_cast<MaterialType>(Random() * 2.99f);
+    const MaterialType eMatType = static_cast<MaterialType>(Random() * 2.99f);
 
     Material oMaterial = {};
     oMaterial.eType = eMatType;
@@ -249,6 +254,13 @@ void InitGame()
     g_oScene.vPosZ.push_back(fPosZ);
     g_oScene.vRadius.push_back(fRadius);
   }
+
+  // Pad sphere arrays to a multiple of 8 so HitSphere8 loads stay in bounds
+  /*const size_t uPaddedCount = (g_oScene.vRadius.size() + 7) & ~size_t(7);
+  g_oScene.vPosX.resize(uPaddedCount, 0.f);
+  g_oScene.vPosY.resize(uPaddedCount, 0.f);
+  g_oScene.vPosZ.resize(uPaddedCount, 0.f);
+  g_oScene.vRadius.resize(uPaddedCount, 0.f);*/
 }
 
 void UpdateScreenBufferPartial(GameScreenBuffer* Buffer, int _iStartX, int _iStartY, int _iEndX, int _iEndY)
@@ -316,9 +328,10 @@ void UpdateScreenBufferPartial(GameScreenBuffer* Buffer, int _iStartX, int _iSta
           int iHittableIdx = -1;
           float fClosestT = FLT_MAX;          
 
-          for (int i = 0; i < g_oScene.vRadius.size(); i += 8)
-          {            
-            HitSphere8Result oHitResult = HitSphere8(oRay.vOrigin, oRay.vDir, &g_oScene.vPosX[i], &g_oScene.vPosY[i], &g_oScene.vPosZ[i], &g_oScene.vRadius[i]);            
+          const int iSphereCount = static_cast<int>(g_oScene.vMaterials.size());
+          for (int i = 0; i < iSphereCount; i += 8)
+          {
+            HitSphere8Result oHitResult = HitSphere8(oRay.vOrigin, oRay.vDir, &g_oScene.vPosX[i], &g_oScene.vPosY[i], &g_oScene.vPosZ[i], &g_oScene.vRadius[i], iSphereCount - i);
 
             if (oHitResult.idx != -1 && oHitResult.t < fClosestT)
             {

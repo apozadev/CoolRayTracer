@@ -17,9 +17,12 @@ project ("CoolRayTracer")
 
 project ("SuperCoolRayTracer")
 
+project ("CoolerRayTracer")
+
 project ("SampleTest")
 
 # Incluya los subproyectos.
 add_subdirectory ("CoolRayTracer")
+add_subdirectory ("CoolerRayTracer")
 add_subdirectory ("SuperCoolRayTracer")
 add_subdirectory ("SampleTest")
