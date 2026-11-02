@@ -15,7 +15,10 @@ struct GameInput {
 
 static constexpr size_t g_uBytesPerPixel = 4;
 
-void InitGame();
+// Spheres in the default scene. -spheres N builds a bigger or smaller world at the same density.
+static constexpr int g_iDefaultSphereCount = 80;
+
+void InitGame(int _iSphereCount);
 
 void UpdateScreenBufferPartial(GameScreenBuffer* Buffer, int _iStartX, int _iStartY, int _iEndX, int _iEndY);
 

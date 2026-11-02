@@ -189,7 +189,7 @@ float LinearToGamma(float _fValue)
   return powf(_fValue, 1.0f / 2.2f);
 }
 
-void InitGame()
+void InitGame(int _iSphereCount)
 {
   const float fRadiusMax = 3.0f;
   const float fRadiusMin = 0.2f;
@@ -199,12 +199,16 @@ void InitGame()
   const float fPosZMin = -20.f;
   const float fPosZMax = 0.f;
 
-  for (int i = 0; i < 80; i++)
+  // Bigger scenes cover a bigger area at the same density. The area grows away from the
+  // camera: its near edge stays at z = 0.
+  const float fAreaScale = sqrtf(static_cast<float>(_iSphereCount) / g_iDefaultSphereCount);
+
+  for (int i = 0; i < _iSphereCount; i++)
   {    
     const float fRadius = Random() * (fRadiusMax - fRadiusMin) + fRadiusMin;
 
-    const float fPosX = (Random() - 0.5f) * 2.0f * (fPosXMax - fPosXMin) + fPosXMin;
-    const float fPosZ = (Random() - 0.5f) * 2.0f * (fPosZMax - fPosZMin) + fPosZMin;    
+    const float fPosX = (Random() - 0.5f) * 2.0f * (fPosXMax - fPosXMin) * fAreaScale + fPosXMin;
+    const float fPosZ = (Random() - 0.5f) * 2.0f * (fPosZMax - fPosZMin) * fAreaScale + fPosZMin * fAreaScale;    
 
     const MaterialType eMatType = static_cast<MaterialType>(Random() * 2.99f);
 

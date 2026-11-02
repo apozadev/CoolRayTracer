@@ -22,8 +22,8 @@ struct Win32ScreenBuffer
 
 static Win32ScreenBuffer g_oBackBuffer = {};
 
-static constexpr int g_iBackBufferWidth = 1280;
-static constexpr int g_iBackBufferHeight = 720;
+static constexpr int g_iWindowWidth = 1280;
+static constexpr int g_iWindowHeight = 720;
 
 static int g_iSamplesPerSecond = 48000;
 
@@ -482,7 +482,9 @@ struct vec2
 // The render is split into square tiles that worker threads pull from a shared counter.
 // Keep the tile size a multiple of 16 px: with 4-byte pixels a tile row is then a whole
 // number of 64-byte cache lines, so two tiles never write to the same line (no false sharing).
-static constexpr int g_iTileSize = 32;
+// -tile N overrides it for tiny benchmark images, where each pixel costs far more than any
+// false sharing could.
+static int g_iTileSize = 32;
 
 // WaitForMultipleObjects can wait on at most this many handles
 static constexpr int g_iMaxRenderThreads = MAXIMUM_WAIT_OBJECTS;
@@ -541,19 +543,20 @@ DWORD WINAPI RenderWorkerThread(LPVOID /*lpParam*/)
   return 0;
 }
 
+// "-name N" on the command line, or _iDefault when it isn't there
+static int ParseIntArg(const char* _pCmdLine, const char* _pName, int _iDefault)
+{
+  const char* pArg = _pCmdLine ? strstr(_pCmdLine, _pName) : nullptr;
+  return pArg ? atoi(pArg + strlen(_pName)) : _iDefault;
+}
+
 // -threads N: number of render threads (default 1, 0 = all logical processors)
 static int ParseThreadCount(const char* _pCmdLine)
 {
-  int iThreadCount = 1;
-
-  const char* pArg = _pCmdLine ? strstr(_pCmdLine, "-threads") : nullptr;
-  if (pArg)
+  int iThreadCount = ParseIntArg(_pCmdLine, "-threads", 1);
+  if (iThreadCount <= 0)
   {
-    iThreadCount = atoi(pArg + strlen("-threads"));
-    if (iThreadCount <= 0)
-    {
-      iThreadCount = static_cast<int>(GetActiveProcessorCount(ALL_PROCESSOR_GROUPS));
-    }
+    iThreadCount = static_cast<int>(GetActiveProcessorCount(ALL_PROCESSOR_GROUPS));
   }
 
   return max(1, min(iThreadCount, g_iMaxRenderThreads));
@@ -569,7 +572,17 @@ int WINAPI WinMain(
   // -bench: write draw time to drawtime.txt and quit as soon as the render finishes
   const bool bBenchMode = lpCmdLine && strstr(lpCmdLine, "-bench") != nullptr;
 
+  // -nodisplay: don't refresh the window while rendering, only show the finished image
+  const bool bLiveDisplay = !(lpCmdLine && strstr(lpCmdLine, "-nodisplay") != nullptr);
+
   const int iThreadCount = ParseThreadCount(lpCmdLine);
+
+  // -spheres N: scene size. -width W -height H: render resolution, stretched to the window.
+  // -tile N: tile size. Together they let bench.ps1 render scenes that don't fit in cache.
+  const int iSphereCount = max(0, ParseIntArg(lpCmdLine, "-spheres", g_iDefaultSphereCount));
+  const int iRenderWidth = max(1, ParseIntArg(lpCmdLine, "-width", g_iWindowWidth));
+  const int iRenderHeight = max(1, ParseIntArg(lpCmdLine, "-height", g_iWindowHeight));
+  g_iTileSize = max(1, ParseIntArg(lpCmdLine, "-tile", g_iTileSize));
 
   Win32LoadXInput();
 
@@ -593,12 +606,12 @@ int WINAPI WinMain(
 
   HWND hWnd = CreateWindowEx(0,
     oWndClass.lpszClassName,
-    "HandmadeHero",
+    "CoolRayTracer",
     WS_OVERLAPPEDWINDOW | WS_VISIBLE,
     CW_USEDEFAULT,
     CW_USEDEFAULT,
-    g_iBackBufferWidth,
-    g_iBackBufferHeight,
+    g_iWindowWidth,
+    g_iWindowHeight,
     NULL,
     NULL,
     hInstance,
@@ -615,9 +628,9 @@ int WINAPI WinMain(
 
   g_pSecondaryBuffer->Play(0, 0, DSBPLAY_LOOPING);
 
-  Win32ResizeDIBSection(g_iBackBufferWidth, g_iBackBufferHeight);
+  Win32ResizeDIBSection(iRenderWidth, iRenderHeight);
 
-  InitGame();
+  InitGame(iSphereCount);
 
   LARGE_INTEGER ilPerfFrequency;
   QueryPerformanceFrequency(&ilPerfFrequency);
@@ -680,13 +693,16 @@ int WINAPI WinMain(
 
       UpdateSoundBuffer();      
 
-      HDC hDeviceCtx = GetDC(hWnd);
+      if (bLiveDisplay)
+      {
+        HDC hDeviceCtx = GetDC(hWnd);
 
-      int iWidth, iHeight;
-      GetWindowDimensions(hWnd, iWidth, iHeight);
-      Win32DisplayBackBuffer(hDeviceCtx, iWidth, iHeight);
+        int iWidth, iHeight;
+        GetWindowDimensions(hWnd, iWidth, iHeight);
+        Win32DisplayBackBuffer(hDeviceCtx, iWidth, iHeight);
 
-      ReleaseDC(hWnd, hDeviceCtx);
+        ReleaseDC(hWnd, hDeviceCtx);
+      }
 
      /* DWORD64 ulEndCycleCount = __rdtsc();
       DWORD64 ulElapsedCycleCount = ulEndCycleCount - ulBeginCycleCount;

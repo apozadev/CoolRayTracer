@@ -15,7 +15,7 @@ constexpr int SAMPLE_COUNT = 10000;
 
 vec2 aSamplePoints[SAMPLE_COUNT];
 
-void InitGame()
+void InitGame(int /*_iSphereCount*/)
 {
   for(int i = 0; i < SAMPLE_COUNT; i++)
   {

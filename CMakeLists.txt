@@ -13,16 +13,22 @@ endif()
 add_compile_options("$<$<CONFIG:RELEASE>:/Zi>")
 add_link_options("$<$<CONFIG:RELEASE>:/DEBUG>") 
 
+project ("OkayRayTracer")
+
 project ("CoolRayTracer")
 
 project ("SuperCoolRayTracer")
+
+project ("MegaCoolRayTracer")
 
 project ("CoolerRayTracer")
 
 project ("SampleTest")
 
 # Incluya los subproyectos.
+add_subdirectory ("OkayRayTracer")
 add_subdirectory ("CoolRayTracer")
 add_subdirectory ("CoolerRayTracer")
 add_subdirectory ("SuperCoolRayTracer")
+add_subdirectory ("MegaCoolRayTracer")
 add_subdirectory ("SampleTest")
